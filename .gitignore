@@ -1,0 +1,26 @@
+# Bytecode / Cache
+__pycache__/
+*.pyc
+
+# Virtuelle Umgebungen
+venv/
+.env/
+.env*/
+
+# Checkpoints (groß!)
+outputs/checkpoints/
+*.pt
+
+# XAI-Heatmaps & generierte Plots (kann man jederzeit neu erzeugen)
+outputs/explanations/
+outputs/metrics/
+
+# Logs
+logs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Sonstiges temporäres Zeug
+.tmp/
