@@ -153,27 +153,33 @@ def main():
         args.ckpt, ds.classes, args.img_size, args.device
     )
 
-    # --- Remapping der True-Labels in Checkpoint-Order ---
-    # Dataset-Order (alphabetisch)
+    # --- Remapping-Hilfsstrukturen ---
     ds_idx2name = {i: n for i, n in enumerate(ds.classes)}
-    # Checkpoint-Order -> Index
     ckpt_name2idx = {n: i for i, n in enumerate(ckpt_classes)}
 
     def remap_true_indices(y_true_indices: np.ndarray) -> np.ndarray:
         names = [ds_idx2name[i] for i in y_true_indices]
         return np.array([ckpt_name2idx[n] for n in names], dtype=int)
 
-    # Inferenz
-    y_true_idx, y_pred_idx = [], []
+    # ---------- Inferenz + Wahrscheinlichkeiten sammeln ----------
+    y_true_idx_batches = []
+    y_pred_idx_batches = []
+    prob_batches       = []
+
     with torch.no_grad():
         for x, y in loader:
             x = x.to(args.device, non_blocking=True)
             logits = model(x)
-            y_pred_idx.append(logits.argmax(dim=1).cpu().numpy())
-            y_true_idx.append(y.numpy())
+            probs  = torch.softmax(logits, dim=1)  # (B, num_classes)
 
-    y_true_idx = np.concatenate(y_true_idx) if len(y_true_idx) else np.array([])
-    y_pred_idx = np.concatenate(y_pred_idx) if len(y_pred_idx) else np.array([])
+            y_true_idx_batches.append(y.numpy())
+            y_pred_idx_batches.append(logits.argmax(dim=1).cpu().numpy())
+            prob_batches.append(probs.cpu().numpy())
+
+    # Alles zu Arrays zusammenbauen
+    y_true_idx = np.concatenate(y_true_idx_batches) if y_true_idx_batches else np.array([])
+    y_pred_idx = np.concatenate(y_pred_idx_batches) if y_pred_idx_batches else np.array([])
+    probs_all  = np.concatenate(prob_batches, axis=0) if prob_batches else np.empty((0, len(ckpt_classes)))
 
     # Ordner für genau dieses Modell anlegen
     model_out_dir = os.path.join(args.out_dir, model_name)
@@ -183,33 +189,47 @@ def main():
         print("[FEHLER] Keine Testdaten gefunden. Prüfe --data_dir und Ordnerstruktur.")
         return
 
-    # True-Indices in Checkpoint-Order remappen
+    # True-Indices in Checkpoint-Order remappen (für Metriken)
     y_true_remap = remap_true_indices(y_true_idx)
 
-    # Metriken (alle in Checkpoint-Order)
+    # ---------- Klassifikationsmetriken ----------
     acc = accuracy_score(y_true_remap, y_pred_idx)
     cm  = confusion_matrix(y_true_remap, y_pred_idx, labels=list(range(len(ckpt_classes))))
-    rep = classification_report(y_true_remap, y_pred_idx, target_names=ckpt_classes, digits=3, zero_division=0)
+    rep = classification_report(
+        y_true_remap,
+        y_pred_idx,
+        target_names=ckpt_classes,
+        digits=3,
+        zero_division=0,
+    )
 
-    # predictions.csv (mit korrekten Namen in Checkpoint-Order)
-    paths = [p for (p, _) in ds.samples]
+    # ---------- predictions.csv mit Wahrscheinlichkeiten ----------
+    paths = [p for (p, _) in ds.samples]  # gleiche Reihenfolge wie Loader (shuffle=False)
+
     rows = []
     for i, p in enumerate(paths):
-        true_name_ds = ds_idx2name[y_true_idx[i]]               # Name gemäß Dataset
-        true_name     = ckpt_classes[ckpt_name2idx[true_name_ds]]  # in Checkpoint-Order
-        pred_name     = ckpt_classes[y_pred_idx[i]]
-        rows.append({
+        true_name_ds = ds_idx2name[y_true_idx[i]]              # Name gemäß Dataset
+        true_name    = ckpt_classes[ckpt_name2idx[true_name_ds]]  # in Checkpoint-Order
+        pred_name    = ckpt_classes[y_pred_idx[i]]
+
+        row = {
             "path": p.replace("\\", "/"),
             "true": true_name,
             "pred": pred_name,
             "correct": bool(true_name == pred_name),
-        })
+        }
+
+        # Wahrscheinlichkeiten pro Klasse (Spalten: prob_<Klassenname>)
+        for cls_idx, cls_name in enumerate(ckpt_classes):
+            row[f"prob_{cls_name}"] = float(probs_all[i, cls_idx])
+
+        rows.append(row)
 
     pred_csv = os.path.join(model_out_dir, "predictions.csv")
     pd.DataFrame(rows).to_csv(pred_csv, index=False, encoding="utf-8")
     print(f"  - {pred_csv}")
 
-    # Dateien speichern
+    # ---------- Dateien für Confusion Matrix & Report ----------
     cm_csv   = os.path.join(model_out_dir, "confusion_matrix.csv")
     rep_txt  = os.path.join(model_out_dir, "classification_report.txt")
     cm_png   = os.path.join(model_out_dir, "confusion_matrix.png")
