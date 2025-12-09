@@ -1,12 +1,13 @@
-# analyze_dataset_distribution.py
+# starten mit python analyze_dataset_distribution.py
+# erstellt eine Donut-Plot-Grafik, die die Verteilung der Klassen im ECG-Trainingsdatensatz zeigt
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-# Pfad zu deinem Trainingsordner
 DATA_TRAIN = Path("data/ecg_train")
 
-# Namen der Unterordner = Klassen
+
 CLASSES = ["Abnormal", "HistoryMI", "MI", "Normal"]
+
 
 def count_images_per_class():
     counts = {}
@@ -17,10 +18,12 @@ def count_images_per_class():
             counts[cls] = 0
             continue
 
-        n = sum(1 for p in cls_dir.glob("*.jpg")) + \
-            sum(1 for p in cls_dir.glob("*.png"))
+        n = sum(1 for p in cls_dir.glob("*.jpg")) + sum(
+            1 for p in cls_dir.glob("*.png")
+        )
         counts[cls] = n
     return counts
+
 
 def plot_donut(counts):
     labels = list(counts.keys())
@@ -33,27 +36,23 @@ def plot_donut(counts):
     fig, ax = plt.subplots(figsize=(6, 6))
     wedges, texts, autotexts = ax.pie(
         values,
-        labels=None,           # Labels separat in der Legende
+        labels=None,
         autopct=lambda p: f"{p:.1f}%",
         startangle=90,
-        pctdistance=0.8
+        pctdistance=0.8,
     )
-    # Loch in der Mitte → Donut
-    centre_circle = plt.Circle((0, 0), 0.50, fc='white')
+    centre_circle = plt.Circle((0, 0), 0.50, fc="white")
     fig.gca().add_artist(centre_circle)
 
-    ax.set_title("Verteilung der ECG-Klassen (Trainingsdaten)")
+    ax.set_title("Class distribution of ECG training data")
 
-    # Legende mit absoluten Zahlen
-    legend_labels = [
-        f"{cls} (n={counts[cls]})" for cls in labels
-    ]
+    legend_labels = [f"{cls} (n={counts[cls]})" for cls in labels]
     ax.legend(
         wedges,
         legend_labels,
-        title="Klassen",
+        title="Classes",
         loc="center left",
-        bbox_to_anchor=(1, 0.5)
+        bbox_to_anchor=(1, 0.5),
     )
 
     fig.tight_layout()
@@ -62,6 +61,7 @@ def plot_donut(counts):
     fig.savefig(out_path, dpi=300)
     print(f"[OK] Speicherung: {out_path}")
     plt.close(fig)
+
 
 if __name__ == "__main__":
     counts = count_images_per_class()

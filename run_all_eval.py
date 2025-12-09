@@ -1,4 +1,5 @@
-# run_all_eval.py
+# starten mit: python run_all_eval.py
+# führt die Evaluation aller Modelle durch
 import os
 
 models = [
@@ -18,10 +19,6 @@ DATA_DIR = "data/ecg_test"
 
 for m in models:
     ckpt = f"outputs/checkpoints/{m}_best.pt"
-    cmd = (
-        f"python -m src.eval "
-        f"--data_dir {DATA_DIR} "
-        f"--ckpt {ckpt}"
-    )
+    cmd = f"python -m src.eval " f"--data_dir {DATA_DIR} " f"--ckpt {ckpt}"
     print(f"\n=== EVAL {m} ===")
     os.system(cmd)

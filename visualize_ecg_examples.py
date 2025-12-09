@@ -1,4 +1,5 @@
-# visualize_ecg_examples.py
+# starten mit: python visualize_ecg_examples.py
+# erstellt Beispiel-Gitter für alle Klassen im ECG-Datensatz
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
@@ -10,19 +11,11 @@ from plot_style import set_confmat_style, apply_axes_style
 
 
 def _find_images_for_class(cls: str, n_examples: int) -> list[Path]:
-    """
-    Sucht Beispielbilder für eine Klasse.
-    Unterstützt .png und .jpg und verschiedene Verzeichnisstrukturen.
-    """
-
-    # bevorzugt TRAIN-Daten
     img_dir = configs.DATA_TRAIN / cls
     if not img_dir.exists():
         raise FileNotFoundError(f"Train-Verzeichnis für Klasse fehlt: {img_dir}")
 
-    files = sorted(
-        list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg"))
-    )
+    files = sorted(list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")))
 
     if not files:
         print(f"[WARN] Keine Bilder für Klasse '{cls}' in {img_dir}")
@@ -32,10 +25,6 @@ def _find_images_for_class(cls: str, n_examples: int) -> list[Path]:
 
 
 def make_grid_for_class(cls: str, n_examples: int = 10):
-    """
-    Erzeugt ein 5×N Grid aus Beispielen einer Klasse.
-    Speichert PNG + PDF in thesis_figures/ecg_examples.
-    """
     set_confmat_style()
 
     files = _find_images_for_class(cls, n_examples=n_examples)
@@ -60,11 +49,10 @@ def make_grid_for_class(cls: str, n_examples: int = 10):
         ax.set_title(f.name, fontsize=8)
         ax.axis("off")
 
-    # leere Achsen ausblenden
     for ax in axes[n:]:
         ax.axis("off")
 
-    fig.suptitle(f"Beispiele der Klasse: {cls}", fontsize=14)
+    fig.suptitle(f"Example ECG images – class: {cls}", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.93])
 
     out_dir = configs.THESIS_DIR / "ecg_examples"
@@ -82,9 +70,6 @@ def make_grid_for_class(cls: str, n_examples: int = 10):
 
 
 def main():
-    """
-    Für jede Klasse in configs.CLASSES eine Grid-Abbildung erzeugen.
-    """
     for cls in configs.CLASSES:
         make_grid_for_class(cls)
 

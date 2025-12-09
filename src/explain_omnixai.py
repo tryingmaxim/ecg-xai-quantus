@@ -1,26 +1,28 @@
-# src/explain_omnixai.py
-
-import os
 import argparse
 from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torchvision.transforms as T
 from PIL import Image as PilImage
 
 from src import configs
 from .model_def import build_model
 
-# KORREKTE OmniXAI-Imports
 from omnixai.data.image import Image as OmniImage
 from omnixai.explainers.vision.specific.gradcam.gradcam import GradCAM, GradCAMPlus
 from omnixai.explainers.vision.specific.ig import IntegratedGradientImage
-DEBUG = True
+from omnixai.explainers.vision.agnostic.lime import LimeImage
 
-# --------------------- Checkpoint Laden -----------------------------------
 
-def load_checkpoint(ckpt_path, device):
+def disable_inplace_relu(model: nn.Module) -> None:
+    for m in model.modules():
+        if isinstance(m, nn.ReLU):
+            m.inplace = False
+
+
+def load_checkpoint(ckpt_path: Path, device: torch.device):
     blob = torch.load(ckpt_path, map_location="cpu")
 
     if isinstance(blob, dict) and "classes" in blob:
@@ -28,7 +30,6 @@ def load_checkpoint(ckpt_path, device):
     else:
         classes = list(configs.CLASSES)
 
-    # Modellname sauber extrahieren
     stem = Path(ckpt_path).stem
     model_name = stem.replace("_best", "")
 
@@ -37,21 +38,23 @@ def load_checkpoint(ckpt_path, device):
     state = blob["state_dict"] if isinstance(blob, dict) else blob
     clean = {k.replace("module.", ""): v for k, v in state.items()}
     model.load_state_dict(clean, strict=False)
+
+    disable_inplace_relu(model)
     model.to(device).eval()
     return model, classes, model_name
 
 
-# ---------------------- Transforms ---------------------------------------
+_TFM = T.Compose(
+    [
+        T.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
+        T.Grayscale(num_output_channels=3),
+        T.ToTensor(),
+        T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    ]
+)
 
-_TFM = T.Compose([
-    T.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
-    T.Grayscale(num_output_channels=3),
-    T.ToTensor(),
-    T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-])
 
-
-def make_preprocess(device):
+def make_preprocess(device: torch.device):
     def preprocess_fn(batch: OmniImage):
         tensors = []
         for img in batch:
@@ -63,9 +66,19 @@ def make_preprocess(device):
     return preprocess_fn
 
 
-# ---------------------- Letzte Conv finden --------------------------------
+def make_predict_function(model: nn.Module, preprocess_fn):
+    def predict(batch: OmniImage):
+        model.eval()
+        with torch.no_grad():
+            x = preprocess_fn(batch)
+            logits = model(x)
+            probs = torch.softmax(logits, dim=1)
+        return probs.cpu().numpy()
 
-def find_last_conv(model):
+    return predict
+
+
+def find_last_conv(model: nn.Module):
     last = None
     for m in model.modules():
         if isinstance(m, torch.nn.Conv2d):
@@ -73,24 +86,20 @@ def find_last_conv(model):
     return last
 
 
-# ---------------------- Heatmap Overlay ----------------------------------
-
-def save_overlay(original_pil, heatmap, out_path):
+def save_overlay(original_pil: PilImage.Image, heatmap: np.ndarray, out_path: Path):
     import cv2
+
     orig = np.array(original_pil.convert("RGB"))
 
-    # Heatmap normalisieren
-    heatmap = heatmap.astype(np.float32)
+    heatmap = np.asarray(heatmap, dtype=np.float32)
     heatmap -= heatmap.min()
     if heatmap.max() > 0:
         heatmap /= heatmap.max()
     heatmap = (heatmap * 255).astype(np.uint8)
 
-    # Größe anpassen
     heatmap = PilImage.fromarray(heatmap).resize((orig.shape[1], orig.shape[0]))
     heatmap = np.array(heatmap)
 
-    # Colormap + Overlay
     colored = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)[:, :, ::-1]
     overlay = (0.55 * orig + 0.45 * colored).clip(0, 255).astype(np.uint8)
 
@@ -98,18 +107,18 @@ def save_overlay(original_pil, heatmap, out_path):
     PilImage.fromarray(overlay).save(out_path)
 
 
-# ---------------------- CLI ----------------------------------------------
-
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--method", required=True, choices=["gradcam", "gradcam++", "ig"])
+    ap.add_argument(
+        "--method",
+        required=True,
+        choices=["gradcam", "gradcam++", "ig", "lime"],
+    )
     ap.add_argument("--data_dir", default="data/ecg_test")
     ap.add_argument("--limit", type=int, default=10)
     return ap.parse_args()
 
-
-# ---------------------- MAIN ----------------------------------------------
 
 def main():
     args = parse_args()
@@ -117,32 +126,44 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Using device: {device}")
 
-    model, classes, model_name = load_checkpoint(args.ckpt, device)
+    model, classes, model_name = load_checkpoint(Path(args.ckpt), device)
     preprocess_fn = make_preprocess(device)
-    last_conv = find_last_conv(model)
 
-    # Explainer auswählen
-    if args.method == "gradcam":
-        explainer = GradCAM(model=model, target_layer=last_conv,
-                            preprocess_function=preprocess_fn, mode="classification")
-    elif args.method == "gradcam++":
-        explainer = GradCAMPlus(model=model, target_layer=last_conv,
-                                preprocess_function=preprocess_fn, mode="classification")
-    else:
-        explainer = IntegratedGradientImage(model=model,
-                                            preprocess_function=preprocess_fn,
-                                            mode="classification")
-
-    # Bilder einlesen
     data_dir = Path(args.data_dir)
     img_paths = sorted(list(data_dir.rglob("*.jpg")) + list(data_dir.rglob("*.png")))
-    img_paths = img_paths[:args.limit]
+    img_paths = img_paths[: args.limit]
 
     if not img_paths:
         print("[ERROR] Keine Bilder gefunden.")
         return
 
-    print(f"[INFO] Erkläre {len(img_paths)} Bilder...")
+    print(f"[INFO] Erkläre {len(img_paths)} Bilder mit {args.method}...")
+
+    last_conv = find_last_conv(model)
+
+    if args.method == "gradcam":
+        explainer = GradCAM(
+            model=model,
+            target_layer=last_conv,
+            preprocess_function=preprocess_fn,
+            mode="classification",
+        )
+    elif args.method == "gradcam++":
+        explainer = GradCAMPlus(
+            model=model,
+            target_layer=last_conv,
+            preprocess_function=preprocess_fn,
+            mode="classification",
+        )
+    elif args.method == "ig":
+        explainer = IntegratedGradientImage(
+            model=model,
+            preprocess_function=preprocess_fn,
+            mode="classification",
+        )
+    else:
+        predict_fn = make_predict_function(model, preprocess_fn)
+        explainer = LimeImage(predict_function=predict_fn, mode="classification")
 
     out_root = configs.EXPL_DIR / model_name / args.method
     out_root.mkdir(parents=True, exist_ok=True)
@@ -151,37 +172,35 @@ def main():
         pil = PilImage.open(path).convert("RGB")
         omni = OmniImage(pil, batched=False)
 
-        explanation = explainer.explain(omni)
+        if args.method == "lime":
+            explanation = explainer.explain(omni, hide_color=0, num_samples=800)
+        else:
+            explanation = explainer.explain(omni)
 
-        # HEATMAP aus dict extrahieren (KORREKT!)
-        explan = explanation.get_explanations()
-        print("\nDEBUG: OUTPUT VON get_explanations():")
-        print(explan)
-        print("\n")
+        explan_list = explanation.get_explanations()
+        explanation_data = explan_list[0]
 
-        explanation_data = explan[0]
-
-        # Finaler Heatmap-Schlüssel (deine OmniXAI-Version nutzt überall "scores")
-        if "scores" in explanation_data:
+        heat = None
+        if isinstance(explanation_data, np.ndarray):
+            heat = explanation_data
+        elif "scores" in explanation_data:
             heat = explanation_data["scores"]
-
         elif "data" in explanation_data:
             heat = explanation_data["data"]
-
         elif "importances" in explanation_data:
             heat = explanation_data["importances"]
+        elif "masks" in explanation_data:
+            masks = explanation_data["masks"]
+            heat = masks[0]
 
-        elif isinstance(explanation_data, np.ndarray):
-            heat = explanation_data
-
-        else:
-            raise ValueError(f"Unbekanntes Heatmap-Format: {explanation_data.keys()}")
-
-
+        if heat is None:
+            raise ValueError(
+                f"Unbekanntes Heatmap-Format für Methode {args.method}: "
+                f"Keys = {getattr(explanation_data, 'keys', lambda: [])()}"
+            )
 
         out_path = out_root / f"{i:03d}.png"
         save_overlay(pil, heat, out_path)
-
         print(f"[OK] {args.method} -> {out_path}")
 
     print(f"[FINISHED] Alle Erklärungen gespeichert unter: {out_root}")

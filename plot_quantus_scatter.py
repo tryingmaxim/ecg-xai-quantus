@@ -1,4 +1,5 @@
-# plot_quantus_scatter.py
+# starten mit: python plot_quantus_scatter.py
+# erstellt Scatter-Plot-Matrix für Quantus-Metriken und Modellgenauigkeit
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,12 +13,10 @@ from src import configs
 
 
 def _get_metrics_dir() -> Path:
-    """Basis-Verzeichnis für Metriken (aus configs oder Fallback)."""
     return getattr(configs, "METRICS_DIR", Path("outputs/metrics"))
 
 
 def _get_thesis_xai_dir() -> Path:
-    """Verzeichnis für XAI-Figuren der Thesis (aus configs oder Fallback)."""
     thesis_base = getattr(configs, "THESIS_DIR", Path("outputs/thesis_figures"))
     xai_dir = Path(thesis_base) / "xai"
     xai_dir.mkdir(parents=True, exist_ok=True)
@@ -25,7 +24,6 @@ def _get_thesis_xai_dir() -> Path:
 
 
 def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> None:
-    """Stellt sicher, dass alle benötigten Spalten vorhanden sind."""
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise KeyError(
@@ -35,17 +33,6 @@ def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> Non
 
 
 def plot_quantus_scatter_grid() -> None:
-    """
-    Erzeugt ein 2×2-Scatter-Grid für Quantus-Metriken:
-
-    (a) Faithfulness vs. Robustheit (MaxSensitivity)
-    (b) Faithfulness vs. Randomisation (MPRT)
-    (c) Robustheit vs. Randomisation
-    (d) Accuracy vs. Faithfulness
-
-    Punkte sind farblich nach XAI-Methode kodiert.
-    NaN-Werte (z.B. MPRT bei Modellen ohne Berechnung) werden pro Subplot entfernt.
-    """
     set_confmat_style()
 
     metrics_dir = _get_metrics_dir()
@@ -65,6 +52,12 @@ def plot_quantus_scatter_grid() -> None:
 
     df_q = pd.read_csv(quantus_path)
     df_p = pd.read_csv(perf_path)
+
+    if "model" not in df_p.columns and "Model" in df_p.columns:
+        rename_map = {"Model": "model"}
+        if "Test Accuracy" in df_p.columns:
+            rename_map["Test Accuracy"] = "accuracy"
+        df_p = df_p.rename(columns=rename_map)
 
     _check_required_columns(
         df_q,
@@ -87,7 +80,6 @@ def plot_quantus_scatter_grid() -> None:
     fig, axes = plt.subplots(2, 2, figsize=(11, 9))
     fig.subplots_adjust(hspace=0.30, wspace=0.25)
 
-    # Helper für die vier Subplots: (ax, x_col, y_col, x_label, y_label, title)
     configs_scatter: List[Tuple] = [
         (
             axes[0, 0],
@@ -126,7 +118,6 @@ def plot_quantus_scatter_grid() -> None:
     methods = sorted(df["method"].unique())
 
     for ax, x_col, y_col, x_label, y_label, title in configs_scatter:
-        # Pro Methode plottet man nur Zeilen mit gültigen Werten für x und y
         for method in methods:
             sub = df[df["method"] == method]
             sub = sub.dropna(subset=[x_col, y_col])
@@ -149,11 +140,9 @@ def plot_quantus_scatter_grid() -> None:
         ax.set_ylabel(y_label)
         ax.set_title(title)
 
-        # Nulllinie sinnvoll bei MPRT/Faithfulness
         if y_col in ("faithfulness_corr", "mprt"):
             ax.axhline(0, color="black", linewidth=0.8, alpha=0.7)
 
-    # gemeinsame Legende (nur aus dem ersten Achsenobjekt)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     if handles:
         fig.legend(
@@ -166,7 +155,6 @@ def plot_quantus_scatter_grid() -> None:
             frameon=False,
         )
 
-    # Platz für Legende unten lassen
     fig.tight_layout(rect=[0, 0.06, 1, 1])
 
     out_path = out_dir / "quantus_scatter_grid.png"

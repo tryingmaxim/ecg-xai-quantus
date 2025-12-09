@@ -1,4 +1,5 @@
-# plot_heatmap_grid.py
+# starten mit: python plot_heatmap_grid.py
+# erstellt ein Heatmap-Grid mit Erklärungen verschiedener Modelle und XAI-Methoden
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,18 +12,11 @@ from plot_style import set_confmat_style
 from src import configs
 
 
-# Default-Methoden & Index (kann via CLI überschrieben werden)
-DEFAULT_METHODS = ["gradcam", "gradcam++", "ig"]
+DEFAULT_METHODS = ["gradcam", "gradcam++", "ig", "lime"]
 DEFAULT_INDEX = "000.png"
 
 
 def _get_explanations_root() -> Path:
-    """
-    Liefert das Root-Verzeichnis für die Erklärungs-Heatmaps.
-
-    Nutzt, falls vorhanden, configs.EXPLANATIONS_DIR, sonst fallback auf
-    'outputs/explanations'.
-    """
     root = getattr(configs, "EXPLANATIONS_DIR", None)
     if root is None:
         root = Path("outputs") / "explanations"
@@ -30,8 +24,6 @@ def _get_explanations_root() -> Path:
 
 
 def _get_plots_out_dir() -> Path:
-    """Ausgabeverzeichnis für allgemeine Plots."""
-    # analog zu deinem Histogramm-Skript
     base = getattr(configs, "METRICS_DIR", Path("outputs/metrics"))
     out_dir = Path(base) / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -39,7 +31,6 @@ def _get_plots_out_dir() -> Path:
 
 
 def _get_thesis_xai_dir() -> Path:
-    """Ausgabeverzeichnis für Thesis-XAI-Figuren."""
     thesis_base = getattr(configs, "THESIS_DIR", Path("outputs/thesis_figures"))
     xai_dir = Path(thesis_base) / "xai"
     xai_dir.mkdir(parents=True, exist_ok=True)
@@ -47,7 +38,6 @@ def _get_thesis_xai_dir() -> Path:
 
 
 def _collect_models(expl_root: Path) -> List[str]:
-    """Findet alle Modellordner unterhalb von expl_root."""
     if not expl_root.exists():
         print(f"[ERROR] Erklärungs-Root existiert nicht: {expl_root}")
         return []
@@ -58,7 +48,6 @@ def _collect_models(expl_root: Path) -> List[str]:
 
 
 def _load_image(img_path: Path) -> Image.Image | None:
-    """Lädt ein Bild robust; gibt None zurück, wenn etwas schiefgeht."""
     try:
         return Image.open(img_path).convert("RGB")
     except FileNotFoundError:
@@ -76,12 +65,7 @@ def _create_axes_grid(
     n_cols: int,
     figsize: Tuple[float, float],
 ) -> Tuple[plt.Figure, List[List[plt.Axes]]]:
-    """
-    Erzeugt eine konsistent 2D-Liste von Axes, egal ob 1×N, N×1 oder NxN.
-    """
     fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-
-    # axes in 2D-Form bringen
     if n_rows == 1 and n_cols == 1:
         axes_2d = [[axes]]
     elif n_rows == 1:
@@ -94,20 +78,20 @@ def _create_axes_grid(
     return fig, axes_2d
 
 
+def _pretty_method_name(method: str) -> str:
+    mapping = {
+        "gradcam": "Grad-CAM",
+        "gradcam++": "Grad-CAM++",
+        "ig": "Integrated Gradients",
+        "lime": "LIME",
+    }
+    return mapping.get(method, method)
+
+
 def plot_heatmap_grid(
     methods: Iterable[str] = DEFAULT_METHODS,
     index_filename: str = DEFAULT_INDEX,
 ) -> None:
-    """
-    Erzeugt ein Grid: Zeilen = Modelle, Spalten = Methoden.
-
-    Parameters
-    ----------
-    methods : Iterable[str]
-        XAI-Methoden, die als Spalten verwendet werden (Ordnernamen).
-    index_filename : str
-        Dateiname des Bildes innerhalb von model/method/, z.B. '000.png'.
-    """
     set_confmat_style()
 
     expl_root = _get_explanations_root()
@@ -122,8 +106,6 @@ def plot_heatmap_grid(
 
     n_rows = len(models)
     n_cols = len(methods)
-
-    # Figurgröße etwas dynamisch skalieren
     fig_width = 3.7 * n_cols
     fig_height = 2.6 * n_rows
     fig, axes = _create_axes_grid(n_rows, n_cols, figsize=(fig_width, fig_height))
@@ -151,7 +133,6 @@ def plot_heatmap_grid(
             ax.set_xlabel("")
             ax.set_ylabel("")
 
-            # Zeilen-Label = Modellname (nur erste Spalte)
             if j == 0:
                 ax.set_ylabel(
                     model,
@@ -161,17 +142,14 @@ def plot_heatmap_grid(
                     va="center",
                 )
 
-            # Spalten-Label = Methodenname (nur erste Zeile)
             if i == 0:
-                ax.set_title(method, fontsize=13, pad=10)
+                ax.set_title(_pretty_method_name(method), fontsize=13, pad=10)
 
     fig.tight_layout()
 
-    # Speichern
     plots_dir = _get_plots_out_dir()
     thesis_dir = _get_thesis_xai_dir()
 
-    # Dateinamen lassen erkennen, welcher Index genutzt wurde
     png_name = f"heatmap_grid_{index_filename.replace('.png', '')}.png"
     pdf_name = f"heatmap_grid_{index_filename.replace('.png', '')}.pdf"
 
@@ -187,15 +165,6 @@ def plot_heatmap_grid(
 
 
 def main() -> None:
-    """
-    Optional: CLI-Interface, damit du Methoden/Index aus der Konsole ändern kannst.
-
-    Beispiele:
-    ----------
-    python -m plot_heatmap_grid
-    python -m plot_heatmap_grid --index 005.png
-    python -m plot_heatmap_grid --methods gradcam ig
-    """
     import argparse
 
     parser = argparse.ArgumentParser(

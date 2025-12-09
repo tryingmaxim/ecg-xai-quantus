@@ -1,4 +1,4 @@
-model,accuracy,macro_f1,weighted_f1,final_train_loss,final_val_loss,final_train_acc,final_val_acc,best_val_acc,epoch_best_val
+Model,Test Accuracy,Macro F1 (Test),Weighted F1 (Test),Final Training Loss,Final Validation Loss,Final Training Accuracy,Final Validation Accuracy,Best Validation Accuracy,Epoch of Best Validation Accuracy
 resnet50,0.9653,0.961,0.965,0.1818200633113766,2.336963653564453,0.9475308641975309,0.5367647058823529,0.9264705882352942,12
 efficientnet_b1,0.9583,0.955,0.959,0.4895382810522009,0.5464810203103458,0.8364197530864198,0.8161764705882353,0.8823529411764706,14
 resnet18,0.9097,0.892,0.904,0.2735997673905926,16.840712603400736,0.8935185185185185,0.2573529411764705,0.875,6

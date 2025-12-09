@@ -1,18 +1,5 @@
-"""
-Quantitative XAI-Evaluation mit Quantus basierend auf OmniXAI-Heatmaps.
-
-- Lädt gespeicherte Heatmaps aus outputs/explanations/<model>/<method>/
-- Lädt die zugehörigen ECG-Testbilder aus data/ecg_test (ImageFolder-Struktur)
-- Bewertet die Erklärungen mit:
-
-    * FaithfulnessCorrelation  (Faithfulness)
-    * MaxSensitivity           (Robustness)
-    * MPRT                     (Randomisation)
-
-Forschungsfrage:
-"Evaluating Visual Explainable AI Methods on ECG Image Data using OmniXAI and Quantus"
-"""
-
+# mit python run_all_quantus.py ausführen (um alle Modelle und Methoden zu testen)
+# Dieses Skript lädt Heatmaps aus Ordnern, nur von Resnet-Modellen werden MPRT-Metriken berechnet.
 import argparse
 from pathlib import Path
 
@@ -26,18 +13,7 @@ from src import configs
 from src.model_def import build_model
 
 
-# ----------------- Helper: Images & Labels laden -----------------
-
-
 def load_images_with_labels(data_dir, img_size, limit=None):
-    """
-    Lädt ECG-Testbilder und Labels als numpy-Arrays.
-
-    Erwartete Struktur:
-        data_dir/<klasse>/*.png
-
-    Klassen-Namen müssen mit configs.CLASSES übereinstimmen.
-    """
     data_dir = Path(data_dir)
     paths = sorted(list(data_dir.rglob("*.png")) + list(data_dir.rglob("*.jpg")))
     if limit is not None:
@@ -62,23 +38,15 @@ def load_images_with_labels(data_dir, img_size, limit=None):
 
         img = Image.open(p).convert("RGB")
         img = img.resize((img_size, img_size))
-        arr = np.array(img).astype(np.float32) / 255.0  # (H,W,C)
-        imgs.append(arr.transpose(2, 0, 1))  # -> (C,H,W)
+        arr = np.array(img).astype(np.float32) / 255.0
+        imgs.append(arr.transpose(2, 0, 1))
 
-    X = np.stack(imgs)  # (N,C,H,W)
+    X = np.stack(imgs)
     y = np.array(labels, dtype=np.int64)
     return X, y, paths
 
 
 def load_heatmaps(hm_dir, img_size, limit=None):
-    """
-    Lädt OmniXAI-Heatmaps als Graustufenbilder und skaliert sie auf img_size.
-
-    Erwartete Struktur:
-        outputs/explanations/<model>/<method>/*.png
-
-    Rückgabeform: (N, 1, H, W) damit mit Quantus kompatibel.
-    """
     hm_dir = Path(hm_dir)
     paths = sorted(list(hm_dir.glob("*.png")) + list(hm_dir.glob("*.jpg")))
     if limit is not None:
@@ -89,13 +57,12 @@ def load_heatmaps(hm_dir, img_size, limit=None):
 
     hmaps = []
     for p in paths:
-        img = Image.open(p).convert("L")  # Graustufe
+        img = Image.open(p).convert("L")
         img = img.resize((img_size, img_size))
-        arr = np.array(img).astype(np.float32) / 255.0  # (H,W) in [0,1]
-        # Kanal-Dimension hinzufügen: (1, H, W)
+        arr = np.array(img).astype(np.float32) / 255.0
         hmaps.append(arr[None, ...])
 
-    H = np.stack(hmaps)  # (N,1,H,W)
+    H = np.stack(hmaps)
     return H, paths
 
 
@@ -122,29 +89,17 @@ def load_model(model_name, num_classes, ckpt_path, device):
 
 
 def map_method_to_quantus(method: str):
-    """
-    Mapping für Quantus / Captum-Erklärfunktion.
-
-    WICHTIG: Für Robustness & Randomisation nutzen wir als interne
-    Referenz-Attribution IMMER IntegratedGradients, weil diese Methode:
-
-    - in Quantus/Captum stabil unterstützt wird
-    - Attributions-Shape (C,H,W) liefert, kompatibel mit Input (C,H,W)
-    - gut im Thesis-Text begründbar ist
-
-    Die eigentlich verglichenen Erklärungen sind weiterhin die OmniXAI-Heatmaps
-    (GradCAM, GradCAM++, IG), die als a_batch übergeben werden.
-    """
     return "IntegratedGradients", {"n_steps": 50}
-
-
-# ----------------- Main -----------------
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--method", required=True, choices=["gradcam", "gradcam++", "ig"])
+    ap.add_argument(
+        "--method",
+        required=True,
+        choices=["gradcam", "gradcam++", "ig", "lime"],
+    )
     ap.add_argument("--data_dir", default="data/ecg_test")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--batch_size", type=int, default=32)
@@ -157,7 +112,6 @@ def main():
     print(f"[INFO] Device: {device}")
     print(f"[INFO] IMG_SIZE: {img_size}")
 
-    # 1) Heatmaps laden (OmniXAI-Outputs)
     hm_dir = Path("outputs/explanations") / args.model / args.method
     if not hm_dir.exists():
         print(f"[ERROR] Heatmap-Ordner fehlt: {hm_dir}")
@@ -168,7 +122,6 @@ def main():
     n_h = len(H)
     print(f"[INFO] Anzahl Heatmaps: {n_h}")
 
-    # 2) Testbilder + Labels laden
     print(f"[INFO] Lade Testbilder aus {args.data_dir} ...")
     X, Y, img_paths = load_images_with_labels(
         args.data_dir, img_size=img_size, limit=args.limit
@@ -176,7 +129,6 @@ def main():
     n_x = len(X)
     print(f"[INFO] Anzahl Bilder: {n_x}")
 
-    # 3) Gleiche Anzahl Samples verwenden
     n = min(n_h, n_x)
     if n == 0:
         print("[ERROR] Keine Samples für Quantus.")
@@ -191,12 +143,12 @@ def main():
     Y = Y[:n]
     H = H[:n]
 
-    # 4) Modell laden
     ckpt_path = f"outputs/checkpoints/{args.model}_best.pt"
     print(f"[INFO] Lade Modell: {ckpt_path}")
-    model = load_model(args.model, num_classes=num_classes, ckpt_path=ckpt_path, device=device)
+    model = load_model(
+        args.model, num_classes=num_classes, ckpt_path=ckpt_path, device=device
+    )
 
-    # 5) Quantus-Explain-Setup (für Robustness/Randomisation)
     quantus_method_name, extra_explain_kwargs = map_method_to_quantus(args.method)
     explain_kwargs = {
         "method": quantus_method_name,
@@ -210,7 +162,6 @@ def main():
     print(f"[INFO] Quantus.explain-Methode: {quantus_method_name}")
     print(f"[INFO] explain_kwargs: {explain_kwargs}")
 
-    # 6) Metriken definieren (Faithfulness, Robustness, Randomisation)
     metrics = {
         "faithfulness_corr": quantus.FaithfulnessCorrelation(
             nr_runs=10,
@@ -229,18 +180,14 @@ def main():
         ),
     }
 
-    # MPRT NUR für diese Modelle rechnen (weil sehr teuer):
     ENABLE_MPRT_MODELS = {"resnet18", "resnet34", "resnet50"}
 
-    if args.model in ENABLE_MPRT_MODELS:
+    if args.model in ENABLE_MPRT_MODELS and args.method != "lime":
         metrics["mprt"] = quantus.MPRT(
             return_average_correlation=True,
             disable_warnings=True,
         )
 
-
-    # 7) Metriken ausführen – alle nutzen die OmniXAI-Heatmaps als a_batch
-        # 7) Metriken ausführen – alle nutzen die OmniXAI-Heatmaps als a_batch
     scores = {}
     for name, metric in metrics.items():
         print(f"[INFO] Running metric: {name} ...")
@@ -253,19 +200,14 @@ def main():
             explain_func=quantus.explain,
             explain_func_kwargs=explain_kwargs,
         )
-        # MPRT gibt manchmal dict zurück -> auf Mittelwert der Werte gehen
         if isinstance(vals, dict):
             vals = list(vals.values())
         scores[name] = float(np.mean(vals))
         print(f"[INFO] {name}: mean = {scores[name]:.6f}")
 
-    # Falls MPRT für dieses Modell nicht berechnet wurde:
     if "mprt" not in scores:
         scores["mprt"] = float("nan")
 
-
-
-    # 8) Ergebnisse speichern
     out_dir = Path("outputs/metrics/quantus_raw")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"quantus_{args.model}_{args.method}.csv"

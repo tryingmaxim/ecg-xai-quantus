@@ -1,11 +1,12 @@
-# run_all_quantus.py
+# starten mit: python run_all_quantus.py
+# führt Quantus-Evaluationen für alle Modelle und XAI-Methoden durch, außer ResNet101, weil zu hohe Laufzeit
 import os
 
 models = [
     "resnet18",
     "resnet34",
     "resnet50",
-    #"resnet101",
+    # "resnet101",
     "densenet121",
     "densenet169",
     "vgg16_bn",
@@ -14,10 +15,10 @@ models = [
     "mobilenet_v2",
 ]
 
-methods = ["gradcam", "gradcam++", "ig"]
+methods = ["gradcam", "gradcam++", "ig", "lime"] 
 
-LIMIT = 10        # 10 Samples pro Modell/Methode
-BATCH_SIZE = 32   # GPU-freundlich
+LIMIT = 10
+BATCH_SIZE = 32
 
 for m in models:
     for method in methods:

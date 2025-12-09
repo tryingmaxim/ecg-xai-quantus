@@ -1,4 +1,5 @@
-# visualize_umap_features.py
+# starten mit: python visualize_umap_features.py
+# visualisiert UMAP der Feature-Repräsentationen für alle Modelle
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,14 +28,13 @@ def get_device() -> torch.device:
 
 
 def make_test_loader() -> Tuple[DataLoader, list[str]]:
-    """
-    Baut einen DataLoader für den Testdatensatz (ImageFolder-Struktur).
-    """
-    tfms = transforms.Compose([
-        transforms.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
-        transforms.Grayscale(num_output_channels=3),
-        transforms.ToTensor(),
-    ])
+    tfms = transforms.Compose(
+        [
+            transforms.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
+            transforms.Grayscale(num_output_channels=3),
+            transforms.ToTensor(),
+        ]
+    )
 
     data_root = getattr(configs, "DATA_TEST", Path("data/ecg_test"))
     ds = datasets.ImageFolder(str(data_root), transform=tfms)
@@ -42,11 +42,9 @@ def make_test_loader() -> Tuple[DataLoader, list[str]]:
     return loader, ds.classes
 
 
-def load_model(model_name: str, num_classes: int, device: torch.device) -> torch.nn.Module:
-    """
-    Lädt ein Modell aus outputs/checkpoints/<model>_best.pt.
-    Unterstützt Checkpoints mit 'state_dict' und DataParallel-Präfix.
-    """
+def load_model(
+    model_name: str, num_classes: int, device: torch.device
+) -> torch.nn.Module:
     ckpt_path = configs.CKPT_DIR / f"{model_name}_best.pt"
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint nicht gefunden: {ckpt_path}")
@@ -69,10 +67,6 @@ def load_model(model_name: str, num_classes: int, device: torch.device) -> torch
 
 
 def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.device):
-    """
-    Extrahiert Feature-Vektoren der vorletzten Schicht für alle Testbilder.
-    Für ResNet & Co: alle Kinderlayer außer dem letzten Klassifikations-Head.
-    """
     feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
 
     feats = []
@@ -81,7 +75,7 @@ def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.d
     with torch.no_grad():
         for x, y in loader:
             x = x.to(device)
-            f = feature_extractor(x)   # z. B. (B, C, 1, 1)
+            f = feature_extractor(x)
             f = f.view(f.size(0), -1)
             feats.append(f.cpu())
             labels.append(y)
@@ -92,9 +86,6 @@ def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.d
 
 
 def plot_umap(feats, labels, class_names, model_name: str):
-    """
-    UMAP der Feature-Repräsentationen plotten und speichern.
-    """
     set_confmat_style()
 
     reducer = umap.UMAP(
@@ -121,7 +112,7 @@ def plot_umap(feats, labels, class_names, model_name: str):
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title(f"UMAP der Feature-Repräsentationen – {model_name}")
+    ax.set_title(f"UMAP of feature representations – {model_name}")
     ax.legend(loc="best", fontsize=8)
 
     fig.tight_layout()

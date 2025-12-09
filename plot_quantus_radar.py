@@ -1,4 +1,5 @@
-# plot_quantus_radar.py
+# starten mit: python plot_quantus_radar.py
+#  erstellt Radar-Plots für die Quantus-Metriken verschiedener XAI-Methoden
 from __future__ import annotations
 
 from math import pi
@@ -14,12 +15,10 @@ from src import configs
 
 
 def _get_metrics_dir() -> Path:
-    """Liefert das Basis-Metrics-Verzeichnis (aus configs oder Fallback)."""
     return getattr(configs, "METRICS_DIR", Path("outputs/metrics"))
 
 
 def _get_thesis_xai_dir() -> Path:
-    """Liefert das Thesis-XAI-Verzeichnis (aus configs oder Fallback)."""
     thesis_base = getattr(configs, "THESIS_DIR", Path("outputs/thesis_figures"))
     xai_dir = Path(thesis_base) / "xai"
     xai_dir.mkdir(parents=True, exist_ok=True)
@@ -27,10 +26,6 @@ def _get_thesis_xai_dir() -> Path:
 
 
 def _safe_normalize(series: pd.Series) -> pd.Series:
-    """
-    Normiert eine numerische Series auf [0, 1].
-    Falls alle Werte gleich sind oder nur NaNs vorliegen, wird 0.5 zurückgegeben.
-    """
     s = pd.to_numeric(series, errors="coerce")
     if s.isna().all():
         return pd.Series(0.5, index=s.index)
@@ -40,14 +35,12 @@ def _safe_normalize(series: pd.Series) -> pd.Series:
     denom = s_max - s_min
 
     if denom <= 0:
-        # alle Werte gleich
         return pd.Series(0.5, index=s.index)
 
     return (s - s_min) / denom
 
 
 def _check_required_columns(df: pd.DataFrame, cols: List[str], df_name: str) -> None:
-    """Stellt sicher, dass alle benötigten Spalten vorhanden sind."""
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise KeyError(
@@ -57,15 +50,6 @@ def _check_required_columns(df: pd.DataFrame, cols: List[str], df_name: str) -> 
 
 
 def plot_quantus_radar() -> None:
-    """
-    Erzeugt pro Modell einen Radar-Plot mit drei Quantus-Metriken:
-
-    - Faithfulness (normierte faithfulness_corr, höher = besser)
-    - Robustheit (1 − normierte max_sens, höher = robustere Erklärungen)
-    - Randomisation (normierte mprt, Richtung abhängig von Interpretation)
-
-    Pro Modell werden die verschiedenen XAI-Methoden als Polygone eingezeichnet.
-    """
     set_confmat_style()
 
     metrics_dir = _get_metrics_dir()
@@ -87,32 +71,27 @@ def plot_quantus_radar() -> None:
     if df.empty:
         raise ValueError("quantus_summary.csv enthält keine Daten.")
 
-    # Normierung über alle Modelle & Methoden hinweg
     faith_norm = _safe_normalize(df["faithfulness_corr"])
     maxsens_norm = _safe_normalize(df["max_sens"])
     mprt_norm = _safe_normalize(df["mprt"])
 
-    # neue Spalten für Radar (semantisch sauber)
     df = df.copy()
-    df["faith_norm"] = faith_norm                 # höher = bessere Faithfulness
-    df["robust_norm"] = 1.0 - maxsens_norm       # höher = robustere Erklärungen
-    df["mprt_norm"] = mprt_norm                  # höhere Werte = "mehr Effekt" im Randomisation-Test
+    df["faith_norm"] = faith_norm
+    df["robust_norm"] = 1.0 - maxsens_norm
+    df["mprt_norm"] = mprt_norm
 
-    # Reihenfolge & Labels im Radar
     metrics = ["faith_norm", "robust_norm", "mprt_norm"]
-    labels = ["Faithfulness", "Robustheit (1−MaxSens)", "Randomisation"]
+    labels = ["Faithfulness", "Robustness (1−MaxSensitivity)", "Randomisation (MPRT)"]
 
     out_dir = metrics_dir / "radar"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     thesis_dir = _get_thesis_xai_dir()
 
-    # Winkel für die Achsen
     num_vars = len(metrics)
     angles = [n / num_vars * 2 * pi for n in range(num_vars)]
-    angles += angles[:1]  # Kreis schließen
+    angles += angles[:1]
 
-    # Pro Modell ein Radar
     for model in sorted(df["model"].unique()):
         subset = df[df["model"] == model]
         if subset.empty:
@@ -121,7 +100,6 @@ def plot_quantus_radar() -> None:
         fig = plt.figure(figsize=(6, 6))
         ax = plt.subplot(111, polar=True)
 
-        # Hintergrund/Style
         ax.set_facecolor("white")
         ax.grid(color="lightgray", alpha=0.4, linewidth=0.7)
         ax.spines["polar"].set_color("black")
@@ -133,11 +111,10 @@ def plot_quantus_radar() -> None:
         ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8"])
         ax.yaxis.grid(True, color="lightgray", alpha=0.4, linewidth=0.7)
 
-        # Linien/Flächen pro XAI-Methode
         for method in sorted(subset["method"].unique()):
             row = subset[subset["method"] == method].iloc[0]
             values = [row[m] for m in metrics]
-            values += values[:1]  # Kreis schließen
+            values += values[:1]
 
             color = get_color(method)
 
@@ -155,16 +132,15 @@ def plot_quantus_radar() -> None:
                 alpha=0.22,
             )
 
-        # Achsenbeschriftung
         ax.set_xticks(angles[:-1])
         ax.set_xticklabels(labels)
 
-        plt.title(f"XAI Evaluation Radar – {model}", pad=15)
+        plt.title(f"XAI evaluation radar – {model}", pad=15)
         ax.legend(
             loc="upper right",
             bbox_to_anchor=(1.25, 1.10),
             frameon=False,
-            title="XAI-Methode",
+            title="XAI method",
         )
 
         fig.tight_layout()
@@ -173,7 +149,7 @@ def plot_quantus_radar() -> None:
         pdf_path = thesis_dir / f"radar_{model}.pdf"
 
         fig.savefig(png_path, dpi=300, bbox_inches="tight")
-        fig.savefig(pdf_path, bbox_inches="tight")
+        fig.savefig(pdf_path, dpi=300, bbox_inches="tight")
 
         plt.close(fig)
         print(f"[OK] Saved PNG: {png_path}")

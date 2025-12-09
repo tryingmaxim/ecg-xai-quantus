@@ -1,4 +1,5 @@
-# plot_quantus_results.py
+# starten mit: python plot_quantus_results.py
+# erstellt Balkendiagramme für die Quantus-Metriken verschiedener XAI-Methoden
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,12 +14,10 @@ from src import configs
 
 
 def _get_metrics_dir() -> Path:
-    """Basis-Verzeichnis für Metriken (aus configs oder Fallback)."""
     return getattr(configs, "METRICS_DIR", Path("outputs/metrics"))
 
 
 def _get_thesis_xai_dir() -> Path:
-    """Verzeichnis für XAI-Figuren der Thesis (aus configs oder Fallback)."""
     thesis_base = getattr(configs, "THESIS_DIR", Path("outputs/thesis_figures"))
     xai_dir = Path(thesis_base) / "xai"
     xai_dir.mkdir(parents=True, exist_ok=True)
@@ -26,7 +25,6 @@ def _get_thesis_xai_dir() -> Path:
 
 
 def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> None:
-    """Stellt sicher, dass alle benötigten Spalten vorhanden sind."""
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise KeyError(
@@ -35,17 +33,17 @@ def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> Non
         )
 
 
+def _pretty_method_name(method: str) -> str:
+    mapping = {
+        "gradcam": "Grad-CAM",
+        "gradcam++": "Grad-CAM++",
+        "ig": "Integrated Gradients",
+        "lime": "LIME",
+    }
+    return mapping.get(method, method)
+
+
 def plot_quantus_results() -> None:
-    """
-    Erstellt Balkenplots für die drei Quantus-Metriken:
-
-    - faithfulness_corr: höhere Werte = bessere Faithfulness
-    - max_sens        : kleinere Werte = robustere Erklärungen
-    - mprt            : je nach Interpretation (im Text erläutern)
-
-    Es werden nur Modelle geplottet, für die es für die jeweilige Metrik
-    überhaupt Werte gibt (mindestens eine Methode mit non-NaN).
-    """
     set_confmat_style()
 
     metrics_dir = _get_metrics_dir()
@@ -67,21 +65,20 @@ def plot_quantus_results() -> None:
     if df.empty:
         raise ValueError("quantus_summary.csv enthält keine Daten.")
 
-    # Definiere zu plottende Metriken: (Spaltenname, Y-Achsentext, Dateiname)
     plots: List[Tuple[str, str, str]] = [
         (
             "faithfulness_corr",
-            "Faithfulness der Erklärungen\n(FaithfulnessCorrelation, höher = besser)",
+            "Faithfulness of explanations\n(FaithfulnessCorrelation, higher = better)",
             "faithfulness.png",
         ),
         (
             "max_sens",
-            "MaxSensitivity\n(kleiner = robustere Erklärungen)",
+            "MaxSensitivity\n(lower = more robust explanations)",
             "robustness.png",
         ),
         (
             "mprt",
-            "Randomisationstest (MPRT)",
+            "Randomisation test (MPRT)",
             "mprt.png",
         ),
     ]
@@ -96,10 +93,10 @@ def plot_quantus_results() -> None:
 
     for metric, y_label, fname in plots:
         if metric not in df.columns:
-            print(f"[WARN] Metrik '{metric}' nicht in DataFrame – Plot wird übersprungen.")
+            print(
+                f"[WARN] Metrik '{metric}' nicht in DataFrame – Plot wird übersprungen."
+            )
             continue
-
-        # 🔹 Nur Modelle behalten, bei denen es für diese Metrik überhaupt Werte gibt
         has_value = (
             df.groupby("model")[metric]
             .apply(lambda s: s.notna().any())
@@ -107,7 +104,9 @@ def plot_quantus_results() -> None:
         )
         models = [m for m, ok in has_value.items() if ok]
         if not models:
-            print(f"[WARN] Keine Modelle mit gültigen Werten für '{metric}' – Plot wird übersprungen.")
+            print(
+                f"[WARN] Keine Modelle mit gültigen Werten für '{metric}' – Plot wird übersprungen."
+            )
             continue
 
         x = np.arange(len(models), dtype=float)
@@ -115,7 +114,6 @@ def plot_quantus_results() -> None:
 
         fig, ax = plt.subplots(figsize=(8, 5))
 
-        # Bestes Modell/Methoden-Kombi nur für Faithfulness highlighten
         best_row = None
         if metric == "faithfulness_corr":
             df_valid = df.dropna(subset=[metric])
@@ -134,11 +132,10 @@ def plot_quantus_results() -> None:
                 x + offset,
                 heights,
                 width=width,
-                label=method,
+                label=_pretty_method_name(method),
                 color=get_color(method),
             )
 
-            # ★ Highlight auf besten Balken (nur für Faithfulness)
             if best_row is not None and metric == "faithfulness_corr":
                 for j, model in enumerate(models):
                     if (
@@ -148,8 +145,11 @@ def plot_quantus_results() -> None:
                     ):
                         y_val = float(heights[j])
                         x_pos = float(x[j] + offset)
-                        # kleiner Offset relativ zur Max-Höhe, damit der Stern nicht abgeschnitten wird
-                        max_height = np.nanmax(heights) if np.isfinite(np.nanmax(heights)) else 1.0
+                        max_height = (
+                            np.nanmax(heights)
+                            if np.isfinite(np.nanmax(heights))
+                            else 1.0
+                        )
                         ax.text(
                             x_pos,
                             y_val + 0.03 * max_height,
@@ -164,25 +164,23 @@ def plot_quantus_results() -> None:
         ax.set_xticklabels(models, rotation=45, ha="right")
 
         ax.set_ylabel(y_label)
-        ax.set_title(f"Quantus Metrik: {metric}")
+        ax.set_title(f"Quantus metric – {metric}")
 
         apply_axes_style(ax)
         ax.axhline(0, color="black", linewidth=0.8)
 
-        # 🔹 Legende außerhalb platzieren, damit sie keine Balken überdeckt
         handles, labels = ax.get_legend_handles_labels()
         if handles:
-            fig.subplots_adjust(right=0.78)  # Platz rechts für Legende
+            fig.subplots_adjust(right=0.78)
             ax.legend(
                 handles,
                 labels,
-                title="XAI-Methode",
+                title="XAI method",
                 loc="center left",
                 bbox_to_anchor=(1.02, 0.5),
                 borderaxespad=0.0,
             )
 
-        # Layout: genug Platz für lange Y-Labels, X-Ticks und Legende
         fig.tight_layout()
 
         png_path = out_dir / fname

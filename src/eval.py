@@ -1,12 +1,7 @@
-# src/eval.py
-# Bewertung des besten Modells auf einem Test-Set:
-# - Accuracy
-# - Klassifikationsreport (Precision/Recall/F1)
-# - Konfusionsmatrix als CSV und PNG
-# - predictions.csv mit Pfad, True, Pred, Correct
-#
+# Bewertung des besten Modells auf einem Test-Set: Accuracy/Klassifikationsreport/Konfusionsmatrix/predictions.csv
 # Aufruf:
-#   python -m src.eval --data_dir data/ecg_test --ckpt outputs/checkpoints/best.pt
+#   python -m src.eval --data_dir data/ecg_test --ckpt outputs/checkpoints/resnet50_best.pt --out_dir outputs/metrics
+#   oder gleich alles mit python run_all_eval.py ausführen
 
 import os
 import argparse
@@ -22,50 +17,71 @@ from src.model_def import build_model
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", type=str, default="data/test",
-                    help="Pfad zum Test-Ordner (ImageFolder-Struktur)")
-    ap.add_argument("--ckpt", type=str, default="outputs/checkpoints/best.pt",
-                    help="Pfad zum gespeicherten Modell-Checkpoint (.pt)")
-    ap.add_argument("--img_size", type=int, default=224,
-                    help="Bildgröße (Transform, kann Checkpoint überschreiben)")
+    ap.add_argument(
+        "--data_dir",
+        type=str,
+        default="data/test",
+        help="Pfad zum Test-Ordner (ImageFolder-Struktur)",
+    )
+    ap.add_argument(
+        "--ckpt",
+        type=str,
+        default="outputs/checkpoints/best.pt",
+        help="Pfad zum gespeicherten Modell-Checkpoint (.pt)",
+    )
+    ap.add_argument(
+        "--img_size",
+        type=int,
+        default=224,
+        help="Bildgröße (Transform, kann Checkpoint überschreiben)",
+    )
     ap.add_argument("--batch", type=int, default=64, help="Batch Size")
     ap.add_argument("--num_workers", type=int, default=2, help="DataLoader Worker")
-    ap.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                    help="Device: cuda oder cpu")
-    ap.add_argument("--out_dir", type=str, default="outputs/metrics", help="Ausgabeordner")
+    ap.add_argument(
+        "--device",
+        type=str,
+        default="cuda" if torch.cuda.is_available() else "cpu",
+        help="Device: cuda oder cpu",
+    )
+    ap.add_argument(
+        "--out_dir", type=str, default="outputs/metrics", help="Ausgabeordner"
+    )
     return ap.parse_args()
 
 
 def build_loader(data_dir: str, img_size: int, batch: int, num_workers: int):
-    tfms = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
-        transforms.Grayscale(num_output_channels=3),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-    ])
+    tfms = transforms.Compose(
+        [
+            transforms.Resize((img_size, img_size)),
+            transforms.Grayscale(num_output_channels=3),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ]
+    )
     ds = datasets.ImageFolder(data_dir, tfms)
-    loader = DataLoader(ds, batch_size=batch, shuffle=False,
-                        num_workers=num_workers, pin_memory=True)
+    loader = DataLoader(
+        ds, batch_size=batch, shuffle=False, num_workers=num_workers, pin_memory=True
+    )
     return ds, loader
 
-def load_checkpoint_and_model(ckpt_path: str, ds_classes, img_size_cli: int, device: str):
-    # robustes Laden (funktioniert mit state_dict ODER dict(state_dict=..., classes=..., img_size=...))
-    blob = torch.load(ckpt_path, map_location="cpu")
 
-    # Klassenreihenfolge aus dem Checkpoint (falls vorhanden), sonst Dataset-Order
-    if isinstance(blob, dict) and "classes" in blob and isinstance(blob["classes"], (list, tuple)):
+def load_checkpoint_and_model(
+    ckpt_path: str, ds_classes, img_size_cli: int, device: str
+):
+    blob = torch.load(ckpt_path, map_location="cpu")
+    if (
+        isinstance(blob, dict)
+        and "classes" in blob
+        and isinstance(blob["classes"], (list, tuple))
+    ):
         classes = list(blob["classes"])
     else:
         classes = list(ds_classes)
-
-    # Modellname aus dem Checkpoint holen (hat train.py gespeichert)
     if isinstance(blob, dict) and "model_name" in blob:
         model_name = blob["model_name"]
     else:
-        # Fallback, falls alter Checkpoint ohne model_name
         model_name = "resnet18"
 
-    # Modell mit passender Architektur bauen
     model = build_model(model_name, num_classes=len(classes))
 
     if isinstance(blob, dict) and "state_dict" in blob:
@@ -75,7 +91,6 @@ def load_checkpoint_and_model(ckpt_path: str, ds_classes, img_size_cli: int, dev
         state = blob
         img_size_ckpt = None
 
-    # evtl. "module." Präfix entfernen
     clean_state = {
         (k.replace("module.", "") if k.startswith("module.") else k): v
         for k, v in state.items()
@@ -92,68 +107,63 @@ def load_checkpoint_and_model(ckpt_path: str, ds_classes, img_size_cli: int, dev
     return model, classes, img_size, model_name
 
 
-def save_confusion_png(cm: np.ndarray, class_names, out_png: str, model_name: str = None):
+def save_confusion_png(
+    cm: np.ndarray, class_names, out_png: str, model_name: str = None
+):
     try:
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(6, 6), dpi=160)
-
-        # >>> Farbpalette wie im Paper, z.B. "Reds"
         im = ax.imshow(cm, interpolation="nearest", cmap="Reds")
-
-        # >>> Titel mit Modellnamen
         if model_name is None:
             title = "Confusion Matrix"
         else:
             title = f"Confusion Matrix - {model_name}"
         ax.set_title(title, fontsize=12)
-
-        # Colorbar
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         cbar.ax.tick_params(labelsize=8)
-
-        # Ticks & Labels
         ax.set_xticks(np.arange(len(class_names)))
         ax.set_yticks(np.arange(len(class_names)))
         ax.set_xticklabels(class_names, rotation=45, ha="right", fontsize=8)
         ax.set_yticklabels(class_names, fontsize=8)
-
-        # Zahlen in die Zellen schreiben
         thresh = cm.max() / 2.0 if cm.size else 0.5
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
                 value = cm[i, j]
                 color = "white" if value > thresh else "black"
                 ax.text(
-                    j, i, int(value),
-                    ha="center", va="center",
-                    color=color, fontsize=8,
+                    j,
+                    i,
+                    int(value),
+                    ha="center",
+                    va="center",
+                    color=color,
+                    fontsize=8,
                 )
 
         ax.set_ylabel("True label", fontsize=10)
         ax.set_xlabel("Predicted label", fontsize=10)
-        ax.set_aspect("equal")  # schöne Quadrate
+        ax.set_aspect("equal")
 
         fig.tight_layout()
         os.makedirs(os.path.dirname(out_png), exist_ok=True)
         plt.savefig(out_png, bbox_inches="tight")
         plt.close(fig)
     except Exception as e:
-        print(f"[WARN] Konnte Konfusionsmatrix-PNG nicht speichern ({e}). CSV wurde dennoch geschrieben.")
+        print(
+            f"[WARN] Konnte Konfusionsmatrix-PNG nicht speichern ({e}). CSV wurde dennoch geschrieben."
+        )
 
 
 def main():
     args = parse_args()
-
-    # Daten laden
-    ds, loader = build_loader(args.data_dir, args.img_size, args.batch, args.num_workers)
-
-    # Modell + (Checkpoint-)Klassen laden
+    ds, loader = build_loader(
+        args.data_dir, args.img_size, args.batch, args.num_workers
+    )
     model, ckpt_classes, _, model_name = load_checkpoint_and_model(
         args.ckpt, ds.classes, args.img_size, args.device
     )
 
-    # --- Remapping-Hilfsstrukturen ---
     ds_idx2name = {i: n for i, n in enumerate(ds.classes)}
     ckpt_name2idx = {n: i for i, n in enumerate(ckpt_classes)}
 
@@ -161,27 +171,32 @@ def main():
         names = [ds_idx2name[i] for i in y_true_indices]
         return np.array([ckpt_name2idx[n] for n in names], dtype=int)
 
-    # ---------- Inferenz + Wahrscheinlichkeiten sammeln ----------
     y_true_idx_batches = []
     y_pred_idx_batches = []
-    prob_batches       = []
+    prob_batches = []
 
     with torch.no_grad():
         for x, y in loader:
             x = x.to(args.device, non_blocking=True)
             logits = model(x)
-            probs  = torch.softmax(logits, dim=1)  # (B, num_classes)
+            probs = torch.softmax(logits, dim=1)
 
             y_true_idx_batches.append(y.numpy())
             y_pred_idx_batches.append(logits.argmax(dim=1).cpu().numpy())
             prob_batches.append(probs.cpu().numpy())
 
-    # Alles zu Arrays zusammenbauen
-    y_true_idx = np.concatenate(y_true_idx_batches) if y_true_idx_batches else np.array([])
-    y_pred_idx = np.concatenate(y_pred_idx_batches) if y_pred_idx_batches else np.array([])
-    probs_all  = np.concatenate(prob_batches, axis=0) if prob_batches else np.empty((0, len(ckpt_classes)))
+    y_true_idx = (
+        np.concatenate(y_true_idx_batches) if y_true_idx_batches else np.array([])
+    )
+    y_pred_idx = (
+        np.concatenate(y_pred_idx_batches) if y_pred_idx_batches else np.array([])
+    )
+    probs_all = (
+        np.concatenate(prob_batches, axis=0)
+        if prob_batches
+        else np.empty((0, len(ckpt_classes)))
+    )
 
-    # Ordner für genau dieses Modell anlegen
     model_out_dir = os.path.join(args.out_dir, model_name)
     os.makedirs(model_out_dir, exist_ok=True)
 
@@ -189,12 +204,12 @@ def main():
         print("[FEHLER] Keine Testdaten gefunden. Prüfe --data_dir und Ordnerstruktur.")
         return
 
-    # True-Indices in Checkpoint-Order remappen (für Metriken)
     y_true_remap = remap_true_indices(y_true_idx)
 
-    # ---------- Klassifikationsmetriken ----------
     acc = accuracy_score(y_true_remap, y_pred_idx)
-    cm  = confusion_matrix(y_true_remap, y_pred_idx, labels=list(range(len(ckpt_classes))))
+    cm = confusion_matrix(
+        y_true_remap, y_pred_idx, labels=list(range(len(ckpt_classes)))
+    )
     rep = classification_report(
         y_true_remap,
         y_pred_idx,
@@ -203,14 +218,13 @@ def main():
         zero_division=0,
     )
 
-    # ---------- predictions.csv mit Wahrscheinlichkeiten ----------
-    paths = [p for (p, _) in ds.samples]  # gleiche Reihenfolge wie Loader (shuffle=False)
+    paths = [p for (p, _) in ds.samples]
 
     rows = []
     for i, p in enumerate(paths):
-        true_name_ds = ds_idx2name[y_true_idx[i]]              # Name gemäß Dataset
-        true_name    = ckpt_classes[ckpt_name2idx[true_name_ds]]  # in Checkpoint-Order
-        pred_name    = ckpt_classes[y_pred_idx[i]]
+        true_name_ds = ds_idx2name[y_true_idx[i]]
+        true_name = ckpt_classes[ckpt_name2idx[true_name_ds]]
+        pred_name = ckpt_classes[y_pred_idx[i]]
 
         row = {
             "path": p.replace("\\", "/"),
@@ -218,8 +232,6 @@ def main():
             "pred": pred_name,
             "correct": bool(true_name == pred_name),
         }
-
-        # Wahrscheinlichkeiten pro Klasse (Spalten: prob_<Klassenname>)
         for cls_idx, cls_name in enumerate(ckpt_classes):
             row[f"prob_{cls_name}"] = float(probs_all[i, cls_idx])
 
@@ -228,13 +240,13 @@ def main():
     pred_csv = os.path.join(model_out_dir, "predictions.csv")
     pd.DataFrame(rows).to_csv(pred_csv, index=False, encoding="utf-8")
     print(f"  - {pred_csv}")
+    cm_csv = os.path.join(model_out_dir, "confusion_matrix.csv")
+    rep_txt = os.path.join(model_out_dir, "classification_report.txt")
+    cm_png = os.path.join(model_out_dir, "confusion_matrix.png")
 
-    # ---------- Dateien für Confusion Matrix & Report ----------
-    cm_csv   = os.path.join(model_out_dir, "confusion_matrix.csv")
-    rep_txt  = os.path.join(model_out_dir, "classification_report.txt")
-    cm_png   = os.path.join(model_out_dir, "confusion_matrix.png")
-
-    pd.DataFrame(cm, index=ckpt_classes, columns=ckpt_classes).to_csv(cm_csv, encoding="utf-8")
+    pd.DataFrame(cm, index=ckpt_classes, columns=ckpt_classes).to_csv(
+        cm_csv, encoding="utf-8"
+    )
     with open(rep_txt, "w", encoding="utf-8") as f:
         f.write(f"Accuracy: {acc:.4f}\n\n{rep}")
     save_confusion_png(cm, ckpt_classes, cm_png, model_name=model_name)

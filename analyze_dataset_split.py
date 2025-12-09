@@ -1,4 +1,5 @@
-# analyze_dataset_split.py
+# starten mit python analyze_dataset_split.py
+# erstellt Balken- und Donut-Diagramme, die die Verteilung der Klassen im ECG-Datensatz nach Train/Val/Test-Split zeigen
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,9 +14,6 @@ from plot_style import set_confmat_style, apply_axes_style
 
 
 def _count_images_in_dir(root: Path, cls: str) -> int:
-    """
-    Zählt .png und .jpg in root/<cls>.
-    """
     cls_dir = root / cls
     if not cls_dir.exists():
         print(f"[WARN] Ordner fehlt: {cls_dir}")
@@ -26,13 +24,6 @@ def _count_images_in_dir(root: Path, cls: str) -> int:
 
 
 def collect_split_counts() -> pd.DataFrame:
-    """
-    Zählt Bilder pro Klasse und Split (train/val/test).
-
-    Rückgabe-DataFrame:
-        index  = Klassen
-        columns = ["train", "val", "test", "total"]
-    """
     classes = list(configs.CLASSES)
 
     train_root = configs.DATA_TRAIN
@@ -61,9 +52,6 @@ def collect_split_counts() -> pd.DataFrame:
 
 
 def plot_class_split_bars(df: pd.DataFrame) -> None:
-    """
-    Balkendiagramm: pro Klasse Train/Val/Test-Anzahl.
-    """
     set_confmat_style()
 
     out_dir = configs.THESIS_DIR / "dataset_stats"
@@ -83,9 +71,9 @@ def plot_class_split_bars(df: pd.DataFrame) -> None:
     ax.set_xticks(x)
     ax.set_xticklabels(classes, rotation=45, ha="right")
 
-    ax.set_ylabel("Anzahl Bilder")
-    ax.set_xlabel("Klasse")
-    ax.set_title("Verteilung der ECG-Klassen nach Split")
+    ax.set_ylabel("Number of images")
+    ax.set_xlabel("Class")
+    ax.set_title("Class distribution across train/val/test splits")
 
     ax.legend(title="Split")
 
@@ -100,9 +88,6 @@ def plot_class_split_bars(df: pd.DataFrame) -> None:
 
 
 def plot_split_donut(df: pd.DataFrame) -> None:
-    """
-    Donut-Chart: globaler Anteil Train / Val / Test (über alle Klassen).
-    """
     set_confmat_style()
 
     out_dir = configs.THESIS_DIR / "dataset_stats"
@@ -131,16 +116,12 @@ def plot_split_donut(df: pd.DataFrame) -> None:
         pctdistance=0.8,
     )
 
-    # Loch in der Mitte → Donut
     centre_circle = plt.Circle((0, 0), 0.55, fc="white")
     fig.gca().add_artist(centre_circle)
 
-    ax.set_title("Dataset Split: Train / Val / Test")
+    ax.set_title("Dataset split: Train / Val / Test")
 
-    # Legende mit absoluten Zahlen
-    legend_labels = [
-        f"{lbl} (n={val})" for lbl, val in zip(labels, values)
-    ]
+    legend_labels = [f"{lbl} (n={val})" for lbl, val in zip(labels, values)]
     ax.legend(
         wedges,
         legend_labels,

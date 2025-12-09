@@ -1,4 +1,5 @@
-# visualize_first_conv_filters.py
+# starten mit: python visualize_first_conv_filters.py
+# visualisiert die ersten Conv-Filter der Modelle
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,14 +14,6 @@ from plot_style import set_confmat_style
 
 
 def _load_model_from_ckpt(model_name: str) -> torch.nn.Module | None:
-    """
-    Lädt ein Modell aus dem Checkpoint.
-
-    Unterstützt sowohl:
-        - {"state_dict": ...}
-        - direktes state_dict
-    und entfernt ggf. 'module.' Prefix (DataParallel).
-    """
     ckpt_path = configs.CKPT_DIR / f"{model_name}_best.pt"
     if not ckpt_path.exists():
         print(f"[WARN] Checkpoint fehlt: {ckpt_path}")
@@ -39,14 +32,12 @@ def _load_model_from_ckpt(model_name: str) -> torch.nn.Module | None:
         for k, v in state.items()
     }
 
-    # strict=False, falls der Checkpoint z.B. noch zusätzliche Keys enthält
     model.load_state_dict(clean_state, strict=False)
     model.eval()
     return model
 
 
 def _get_first_conv_layer(model: torch.nn.Module) -> torch.nn.Conv2d | None:
-    """Findet die erste Conv2d-Schicht im Modell."""
     for m in model.modules():
         if isinstance(m, torch.nn.Conv2d):
             return m
@@ -54,13 +45,6 @@ def _get_first_conv_layer(model: torch.nn.Module) -> torch.nn.Conv2d | None:
 
 
 def visualize_first_conv(model_name: str, n_filters: int = 32) -> None:
-    """
-    Visualisiert die ersten Convolution-Filter eines Modells als Grid.
-
-    - Filter werden über Farbkanäle gemittelt (C_in → 1)
-    - auf [0, 1] normalisiert
-    - als Graustufenbilder geplottet
-    """
     set_confmat_style()
 
     model = _load_model_from_ckpt(model_name)
@@ -73,18 +57,15 @@ def visualize_first_conv(model_name: str, n_filters: int = 32) -> None:
         return
 
     with torch.no_grad():
-        w = first_conv.weight.detach().cpu().clone()  # (C_out, C_in, k, k)
+        w = first_conv.weight.detach().cpu().clone()
 
-    # über Eingangs-Farbkanäle mitteln → (C_out, 1, k, k)
     w = w.mean(dim=1, keepdim=True)
 
-    # gegen Division durch 0 absichern
     w_min = float(w.min())
     w_max = float(w.max())
     if w_max > w_min:
         w = (w - w_min) / (w_max - w_min)
     else:
-        # alle Gewichte gleich → konstante 0.5
         w = torch.zeros_like(w) + 0.5
 
     n_filters = min(n_filters, w.shape[0])
@@ -100,11 +81,10 @@ def visualize_first_conv(model_name: str, n_filters: int = 32) -> None:
         ax.set_title(f"F{i}", fontsize=8)
         ax.axis("off")
 
-    # restliche Achsen ausblenden
     for j in range(n_filters, len(axes)):
         axes[j].axis("off")
 
-    fig.suptitle(f"Erste Conv-Filter – {model_name}", fontsize=14)
+    fig.suptitle(f"First convolution filters – {model_name}", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.93])
 
     out_dir = configs.THESIS_DIR / "filters"
@@ -121,10 +101,6 @@ def visualize_first_conv(model_name: str, n_filters: int = 32) -> None:
 
 
 def main() -> None:
-    """
-    Standard: alle Modelle in configs.MODEL_NAMES.
-    Optional: mit --model nur ein Modell ausgeben.
-    """
     import argparse
 
     parser = argparse.ArgumentParser(

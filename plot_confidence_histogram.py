@@ -1,4 +1,5 @@
-# plot_confidence_histogram.py
+# starten mit: python plot_confidence_histogram.py
+# erstellt Histogramme der Modell-Konfidenz für die wahre Klasse
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,7 +10,6 @@ from plot_style import set_confmat_style
 
 
 def _get_label_cols(df: pd.DataFrame):
-    """Ermittelt Spaltennamen für True/Pred-Label."""
     if "true_label" in df.columns and "pred_label" in df.columns:
         return "true_label", "pred_label"
     if "true" in df.columns and "pred" in df.columns:
@@ -18,7 +18,6 @@ def _get_label_cols(df: pd.DataFrame):
 
 
 def plot_confidence_hist(pred_path: Path):
-    # Modellname aus dem Ordnernamen ableiten (…/metrics/resnet50/predictions.csv)
     model_name = pred_path.parent.name
 
     df = pd.read_csv(pred_path)
@@ -28,7 +27,6 @@ def plot_confidence_hist(pred_path: Path):
         print(f"[WARN] Keine passenden Label-Spalten in {pred_path}, skip.")
         return
 
-    # Prüfen, ob es überhaupt prob_* Spalten gibt
     prob_cols = [c for c in df.columns if c.startswith("prob_")]
     if not prob_cols:
         print(f"[WARN] Keine prob_* Spalten in {pred_path}, skip.")
@@ -53,29 +51,46 @@ def plot_confidence_hist(pred_path: Path):
     is_correct = pd.Series(is_correct, dtype=bool)
 
     probs_correct = true_probs[is_correct]
-    probs_wrong   = true_probs[~is_correct]
+    probs_wrong = true_probs[~is_correct]
 
-    # einfache Accuracy für den Titel
     acc = is_correct.mean() if len(is_correct) > 0 else float("nan")
 
-    set_confmat_style()  # einheitlicher Style
+    set_confmat_style()
     fig, ax = plt.subplots(figsize=(7, 4))
 
     bins = np.linspace(0.0, 1.0, 21)
 
-    ax.hist(probs_correct, bins=bins, alpha=0.6, color="grey", label=f"korrekt (n={probs_correct.size})")
-    ax.hist(probs_wrong,   bins=bins, alpha=0.6, color="red",  label=f"falsch (n={probs_wrong.size})")
+    ax.hist(
+        probs_correct,
+        bins=bins,
+        alpha=0.6,
+        color="grey",
+        label=f"correct (n={probs_correct.size})",
+    )
+    ax.hist(
+        probs_wrong,
+        bins=bins,
+        alpha=0.6,
+        color="red",
+        label=f"incorrect (n={probs_wrong.size})",
+    )
 
-    ax.set_xlabel("Modell-Konfidenz für wahre Klasse")
-    ax.set_ylabel("Anzahl Beispiele")
-    ax.set_title(f"Verteilung der Konfidenz – {model_name} (Accuracy = {acc:.3f})")
+    ax.set_xlabel("Model confidence for true class")
+    ax.set_ylabel("Number of samples")
+    ax.set_title(f"Confidence distribution – {model_name} (Accuracy = {acc:.3f})")
     ax.legend()
 
-    # Beispiel-Threshold (z.B. 0.5)
     ax.axvline(0.5, color="blue", linestyle="--", linewidth=1)
     ymax = ax.get_ylim()[1]
-    ax.text(0.5, ymax * 0.95, "Threshold 0.5", ha="center", va="top",
-            color="blue", fontsize=9)
+    ax.text(
+        0.5,
+        ymax * 0.95,
+        "Threshold 0.5",
+        ha="center",
+        va="top",
+        color="blue",
+        fontsize=9,
+    )
 
     fig.tight_layout()
 
@@ -93,8 +108,6 @@ def plot_confidence_hist(pred_path: Path):
 
 def main():
     metrics_dir = configs.METRICS_DIR
-
-    # Wir erwarten: outputs/metrics/<model>/predictions.csv
     model_dirs = [d for d in metrics_dir.iterdir() if d.is_dir()]
     if not model_dirs:
         print("[ERR] Keine Modellordner in", metrics_dir)

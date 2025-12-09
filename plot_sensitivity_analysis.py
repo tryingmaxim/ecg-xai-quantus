@@ -1,4 +1,5 @@
-# plot_sensitivity_analysis.py
+# starten mit: python plot_sensitivity_analysis.py
+# erstellt Trend-Plot für MaxSensitivity verschiedener Modelle und XAI-Methoden
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,12 +14,10 @@ from src import configs
 
 
 def _get_metrics_dir() -> Path:
-    """Basis-Verzeichnis für Metriken (aus configs oder Fallback)."""
     return getattr(configs, "METRICS_DIR", Path("outputs/metrics"))
 
 
 def _get_thesis_xai_dir() -> Path:
-    """Verzeichnis für XAI-Figuren der Thesis (aus configs oder Fallback)."""
     thesis_base = getattr(configs, "THESIS_DIR", Path("outputs/thesis_figures"))
     xai_dir = Path(thesis_base) / "xai"
     xai_dir.mkdir(parents=True, exist_ok=True)
@@ -26,7 +25,6 @@ def _get_thesis_xai_dir() -> Path:
 
 
 def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> None:
-    """Stellt sicher, dass alle benötigten Spalten vorhanden sind."""
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise KeyError(
@@ -35,16 +33,17 @@ def _check_required_columns(df: pd.DataFrame, cols: List[str], name: str) -> Non
         )
 
 
+def _pretty_method_name(method: str) -> str:
+    mapping = {
+        "gradcam": "Grad-CAM",
+        "gradcam++": "Grad-CAM++",
+        "ig": "Integrated Gradients",
+        "lime": "LIME",
+    }
+    return mapping.get(method, method)
+
+
 def plot_sensitivity_trend() -> None:
-    """
-    Plottet den Trend der Robustheit (MaxSensitivity) über alle Modelle hinweg.
-
-    - x-Achse: Modelle
-    - y-Achse: MaxSensitivity (kleiner = robustere Erklärungen)
-    - Linien: XAI-Methoden
-
-    Modelle ohne MaxSensitivity-Werte (für alle Methoden NaN) werden ausgelassen.
-    """
     set_confmat_style()
 
     metrics_dir = _get_metrics_dir()
@@ -66,11 +65,8 @@ def plot_sensitivity_trend() -> None:
     if df.empty:
         raise ValueError("quantus_summary.csv enthält keine Daten.")
 
-    # Nur Modelle berücksichtigen, bei denen es überhaupt MaxSensitivity-Werte gibt
     has_value = (
-        df.groupby("model")["max_sens"]
-        .apply(lambda s: s.notna().any())
-        .sort_index()
+        df.groupby("model")["max_sens"].apply(lambda s: s.notna().any()).sort_index()
     )
     models = [m for m, ok in has_value.items() if ok]
     if not models:
@@ -83,7 +79,6 @@ def plot_sensitivity_trend() -> None:
 
     thesis_dir = _get_thesis_xai_dir()
 
-    # X-Achse numerisch, Labels separat (robuster als direkt Strings plotten)
     x = np.arange(len(models), dtype=float)
 
     fig, ax = plt.subplots(figsize=(9, 4))
@@ -94,7 +89,6 @@ def plot_sensitivity_trend() -> None:
 
         y = sub["max_sens"].values
 
-        # falls alle NaN: Methode überspringen
         if np.all(np.isnan(y)):
             continue
 
@@ -104,19 +98,19 @@ def plot_sensitivity_trend() -> None:
             marker="o",
             linestyle="-",
             linewidth=1.8,
-            label=method,
+            label=_pretty_method_name(method),
             color=get_color(method),
         )
 
     apply_axes_style(ax)
-    ax.set_ylabel("MaxSensitivity\n(kleiner = robustere Erklärungen)")
-    ax.set_xlabel("Modell")
-    ax.set_title("Trend der Robustheit (MaxSensitivity)")
+    ax.set_ylabel("MaxSensitivity\n(lower = more robust explanations)")
+    ax.set_xlabel("Model")
+    ax.set_title("Trend in explanation robustness (MaxSensitivity)")
 
     ax.set_xticks(x)
     ax.set_xticklabels(models, rotation=45, ha="right")
 
-    ax.legend(title="XAI-Methode", loc="best")
+    ax.legend(title="XAI method", loc="best")
 
     fig.tight_layout()
 

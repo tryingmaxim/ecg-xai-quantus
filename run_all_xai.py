@@ -1,4 +1,5 @@
-# run_all_xai.py (im Projekt-Root)
+# starten mit: python run_all_xai.py
+# führt OmniXAI-Erklärungen für alle Modelle und XAI-Methoden durch
 import os
 
 models = [
@@ -14,14 +15,14 @@ models = [
     "mobilenet_v2",
 ]
 
-methods = ["gradcam", "gradcam++", "ig"]
+METHODS = ["gradcam", "gradcam++", "ig", "lime"]
 
 DATA_DIR = "data/ecg_test"
 LIMIT = 10
 
 for m in models:
     ckpt = f"outputs/checkpoints/{m}_best.pt"
-    for method in methods:
+    for method in METHODS:
         cmd = (
             f"python -m src.explain_omnixai "
             f"--ckpt {ckpt} "

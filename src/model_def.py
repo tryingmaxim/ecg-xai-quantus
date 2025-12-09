@@ -1,11 +1,17 @@
 import torch.nn as nn
 from torchvision.models import (
-    resnet18, resnet34, resnet50, resnet101,
-    densenet121, densenet169,
+    resnet18,
+    resnet34,
+    resnet50,
+    resnet101,
+    densenet121,
+    densenet169,
     vgg16_bn,
-    efficientnet_b0, efficientnet_b1,
+    efficientnet_b0,
+    efficientnet_b1,
     mobilenet_v2,
 )
+
 
 def build_model(name: str, num_classes: int):
     name = name.lower()
