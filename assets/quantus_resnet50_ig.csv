@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+resnet50,ig,-0.16406416073441504,0.9586181938648224,-0.021929860915329544

@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+resnet50,lime,0.03546454235911369,0.9471302330493927,
