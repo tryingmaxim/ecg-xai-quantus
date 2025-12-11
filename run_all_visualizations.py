@@ -13,6 +13,7 @@ VIS_SCRIPTS = [
     #"visualize_feature_maps.py",
     "visualize_umap_features.py",
     "visualize_super_grid_all.py",
+    "visualize_ecg_overview_per_class.py",
 ]
 
 
