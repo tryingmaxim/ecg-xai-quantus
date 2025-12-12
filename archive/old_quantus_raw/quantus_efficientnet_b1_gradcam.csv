@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+efficientnet_b1,gradcam,0.024699962139129637,0.9073365151882171,

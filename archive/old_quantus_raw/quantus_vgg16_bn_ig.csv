@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+vgg16_bn,ig,0.028261484950780867,0.9438950836658477,

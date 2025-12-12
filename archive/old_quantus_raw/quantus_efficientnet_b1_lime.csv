@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+efficientnet_b1,lime,-0.10905529111623764,0.9002301573753357,

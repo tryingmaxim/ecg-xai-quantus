@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+resnet50,gradcam++,-0.1536976493895054,0.9470868766307831,-0.025191449757510715

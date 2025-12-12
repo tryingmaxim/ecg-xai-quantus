@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+densenet121,lime,-0.08358857184648513,0.9637665987014771,

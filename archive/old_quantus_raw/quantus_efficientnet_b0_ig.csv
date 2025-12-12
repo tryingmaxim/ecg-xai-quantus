@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+efficientnet_b0,ig,0.025539644807577134,0.9071310460567474,

@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+densenet169,ig,0.25719808861613275,0.955991393327713,

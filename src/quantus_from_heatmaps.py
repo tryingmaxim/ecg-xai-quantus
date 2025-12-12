@@ -2,7 +2,7 @@
 # Dieses Skript lädt Heatmaps aus Ordnern, nur von Resnet-Modellen werden MPRT-Metriken berechnet.
 import argparse
 from pathlib import Path
-
+import gc
 import numpy as np
 import torch
 from PIL import Image
@@ -15,7 +15,11 @@ from src.model_def import build_model
 
 def load_images_with_labels(data_dir, img_size, limit=None):
     data_dir = Path(data_dir)
-    paths = sorted(list(data_dir.rglob("*.png")) + list(data_dir.rglob("*.jpg")))
+    paths = sorted(
+        list(data_dir.glob("*.png"))
+        + list(data_dir.glob("*.jpg"))
+        + list(data_dir.glob("*.jpeg"))
+    )
     if limit is not None:
         paths = paths[:limit]
 
@@ -24,18 +28,34 @@ def load_images_with_labels(data_dir, img_size, limit=None):
 
     class_to_idx = {name: idx for idx, name in enumerate(configs.CLASSES)}
 
-    imgs = []
-    labels = []
-    for p in paths:
-        cls_name = p.parent.name
-        if cls_name not in class_to_idx:
-            raise RuntimeError(
-                f"Ordnername '{cls_name}' nicht in configs.CLASSES: "
-                f"{list(class_to_idx.keys())}"
-            )
-        label = class_to_idx[cls_name]
-        labels.append(label)
+    labels_csv = data_dir / "labels.csv"
+    if labels_csv.exists():
+        df = pd.read_csv(labels_csv)
+        file_to_class = dict(zip(df["file"], df["class"]))
 
+        labels = []
+        for p in paths:
+            cls_name = file_to_class.get(p.name)
+            if cls_name is None:
+                raise RuntimeError(f"Keine Klasse für {p.name} in {labels_csv}")
+            if cls_name not in class_to_idx:
+                raise RuntimeError(
+                    f"Klasse '{cls_name}' aus labels.csv nicht in configs.CLASSES: {list(class_to_idx.keys())}"
+                )
+            labels.append(class_to_idx[cls_name])
+
+    else:
+        labels = []
+        for p in paths:
+            cls_name = p.parent.name
+            if cls_name not in class_to_idx:
+                raise RuntimeError(
+                    f"Ordnername '{cls_name}' nicht in configs.CLASSES: {list(class_to_idx.keys())}"
+                )
+            labels.append(class_to_idx[cls_name])
+
+    imgs = []
+    for p in paths:
         img = Image.open(p).convert("RGB")
         img = img.resize((img_size, img_size))
         arr = np.array(img).astype(np.float32) / 255.0
@@ -89,7 +109,7 @@ def load_model(model_name, num_classes, ckpt_path, device):
 
 
 def map_method_to_quantus(method: str):
-    return "IntegratedGradients", {"n_steps": 50}
+    return "IntegratedGradients", {"n_steps": 10}
 
 
 def main():
@@ -100,9 +120,9 @@ def main():
         required=True,
         choices=["gradcam", "gradcam++", "ig", "lime"],
     )
-    ap.add_argument("--data_dir", default="data/ecg_test")
+    ap.add_argument("--data_dir", default="data/ecg_test_flat")
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--batch_size", type=int, default=32)
+    ap.add_argument("--batch_size", type=int, default=4)
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -204,7 +224,10 @@ def main():
             vals = list(vals.values())
         scores[name] = float(np.mean(vals))
         print(f"[INFO] {name}: mean = {scores[name]:.6f}")
-
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
     if "mprt" not in scores:
         scores["mprt"] = float("nan")
 

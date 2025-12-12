@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+vgg16_bn,lime,0.02563546076416969,0.9253605484962464,

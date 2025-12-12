@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+densenet169,gradcam++,0.247865928709507,0.9428243398666382,

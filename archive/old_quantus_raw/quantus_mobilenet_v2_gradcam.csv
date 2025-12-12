@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+mobilenet_v2,gradcam,0.0490735724568367,0.916135060787201,

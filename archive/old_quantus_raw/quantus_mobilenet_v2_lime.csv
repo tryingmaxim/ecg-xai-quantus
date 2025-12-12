@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+mobilenet_v2,lime,-0.05006285309791565,0.9231994450092316,

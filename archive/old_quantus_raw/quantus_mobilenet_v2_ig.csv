@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+mobilenet_v2,ig,-0.057910499535501,0.9179211795330048,

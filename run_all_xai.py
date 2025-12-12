@@ -18,7 +18,7 @@ models = [
 METHODS = ["gradcam", "gradcam++", "ig", "lime"]
 
 DATA_DIR = "data/ecg_test"
-LIMIT = 10
+LIMIT = 144
 
 for m in models:
     ckpt = f"outputs/checkpoints/{m}_best.pt"

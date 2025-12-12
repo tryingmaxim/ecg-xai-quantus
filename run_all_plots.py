@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 PLOT_SCRIPTS = [
+    "generate_quantus_summary.py",
+    "generate_results_table.py",
     "analyze_dataset_distribution.py",
     "analyze_dataset_split.py",
     "generate_results_table.py",

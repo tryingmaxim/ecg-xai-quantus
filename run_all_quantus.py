@@ -17,8 +17,8 @@ models = [
 
 methods = ["gradcam", "gradcam++", "ig", "lime"] 
 
-LIMIT = 10
-BATCH_SIZE = 32
+LIMIT = 144
+BATCH_SIZE = 4
 
 for m in models:
     for method in methods:
@@ -26,7 +26,7 @@ for m in models:
             f"python -m src.quantus_from_heatmaps "
             f"--model {m} "
             f"--method {method} "
-            f"--data_dir data/ecg_test "
+            f"--data_dir data/ecg_test_flat "
             f"--limit {LIMIT} "
             f"--batch_size {BATCH_SIZE}"
         )

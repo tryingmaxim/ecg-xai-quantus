@@ -1,0 +1,2 @@
+model,method,faithfulness_corr,max_sens,mprt
+vgg16_bn,gradcam,0.018725430220365526,0.9431361019611358,
