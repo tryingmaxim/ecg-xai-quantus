@@ -33,7 +33,7 @@ def load_checkpoint(ckpt_path: Path, device: torch.device):
     stem = Path(ckpt_path).stem
     model_name = stem.replace("_best", "")
 
-    model = build_model(model_name, num_classes=len(classes))
+    model = build_model(model_name, num_classes=len(classes), pretrained=configs.PRETRAINED)
 
     state = blob["state_dict"] if isinstance(blob, dict) else blob
     clean = {k.replace("module.", ""): v for k, v in state.items()}
@@ -49,7 +49,7 @@ _TFM = T.Compose(
         T.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
         T.Grayscale(num_output_channels=3),
         T.ToTensor(),
-        T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        T.Normalize(mean=configs.IMAGENET_MEAN, std=configs.IMAGENET_STD)
     ]
 )
 
@@ -107,6 +107,78 @@ def save_overlay(original_pil: PilImage.Image, heatmap: np.ndarray, out_path: Pa
     PilImage.fromarray(overlay).save(out_path)
 
 
+def to_2d_heatmap(heat: np.ndarray) -> np.ndarray:
+    heat = np.asarray(heat)
+
+    if heat.ndim == 3:
+        if heat.shape[-1] == 1:
+            heat = heat[..., 0]
+        elif heat.shape[0] == 1:
+            heat = heat[0]
+        else:
+            if heat.shape[-1] in (3, 4):
+                heat = heat.mean(axis=-1)
+            else:
+                heat = heat.mean(axis=0)
+
+    if heat.ndim != 2:
+        raise ValueError(
+            f"Heatmap konnte nicht auf 2D gebracht werden, shape={heat.shape}"
+        )
+
+    heat = heat.astype(np.float32)
+    return heat
+
+
+def normalise_01(hm: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    hm = hm.astype(np.float32)
+    hm = hm - hm.min()
+    mx = hm.max()
+    if mx > eps:
+        hm = hm / mx
+    return hm
+
+
+def save_heatmap_only(
+    heat: np.ndarray,
+    out_npy: Path,
+    out_png: Path | None,
+    target_size: tuple[int, int],
+):
+    hm2d = to_2d_heatmap(heat)
+    hm2d = normalise_01(hm2d)
+
+    hm_img = PilImage.fromarray((hm2d * 255).astype(np.uint8))
+    hm_img = hm_img.resize(target_size)
+    hm2d_resized = np.array(hm_img).astype(np.float32) / 255.0
+
+    out_npy.parent.mkdir(parents=True, exist_ok=True)
+    np.save(out_npy, hm2d_resized.astype(np.float32))
+
+    if out_png is not None:
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        PilImage.fromarray((hm2d_resized * 255).astype(np.uint8)).save(out_png)
+
+
+def save_overlay_from_heatmap(
+    original_pil: PilImage.Image, heat: np.ndarray, out_path: Path
+):
+    import cv2
+
+    orig = np.array(original_pil.convert("RGB"))
+    hm2d = normalise_01(to_2d_heatmap(heat))
+
+    heat_u8 = (hm2d * 255).astype(np.uint8)
+    heat_u8 = PilImage.fromarray(heat_u8).resize((orig.shape[1], orig.shape[0]))
+    heat_u8 = np.array(heat_u8)
+
+    colored = cv2.applyColorMap(heat_u8, cv2.COLORMAP_JET)[:, :, ::-1]
+    overlay = (0.55 * orig + 0.45 * colored).clip(0, 255).astype(np.uint8)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    PilImage.fromarray(overlay).save(out_path)
+
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
@@ -122,7 +194,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Using device: {device}")
 
@@ -140,7 +212,8 @@ def main():
     print(f"[INFO] Erkläre {len(img_paths)} Bilder mit {args.method}...")
 
     last_conv = find_last_conv(model)
-
+    print(f"[DEBUG] Last conv layer: {last_conv}")
+    
     if args.method == "gradcam":
         explainer = GradCAM(
             model=model,
@@ -199,9 +272,25 @@ def main():
                 f"Keys = {getattr(explanation_data, 'keys', lambda: [])()}"
             )
 
-        out_path = out_root / f"{i:03d}.png"
-        save_overlay(pil, heat, out_path)
-        print(f"[OK] {args.method} -> {out_path}")
+        overlay_dir = out_root / "overlay"
+        heatmap_dir = out_root / "heatmap"
+        overlay_dir.mkdir(parents=True, exist_ok=True)
+        heatmap_dir.mkdir(parents=True, exist_ok=True)
+
+        overlay_path = overlay_dir / f"{i:03d}.png"
+        heatmap_npy = heatmap_dir / f"{i:03d}.npy"
+        heatmap_png = heatmap_dir / f"{i:03d}.png"
+
+        save_heatmap_only(
+            heat=heat,
+            out_npy=heatmap_npy,
+            out_png=heatmap_png,
+            target_size=pil.size,
+        )
+
+        save_overlay_from_heatmap(pil, heat, overlay_path)
+
+        print(f"[OK] {args.method} -> {overlay_path} (+ heatmap-only: {heatmap_npy})")
 
     print(f"[FINISHED] Alle Erklärungen gespeichert unter: {out_root}")
 

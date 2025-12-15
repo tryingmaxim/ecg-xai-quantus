@@ -21,18 +21,27 @@ def make_transforms():
     train_tfms = transforms.Compose(
         [
             transforms.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
+            transforms.RandomAffine(degrees=0, translate=(0.02, 0.02), fill=0),
             transforms.RandomApply([transforms.RandomRotation(3, fill=0)], p=0.5),
             transforms.Grayscale(num_output_channels=3),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
         ]
     )
+
     eval_tfms = transforms.Compose(
         [
             transforms.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
             transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
         ]
     )
     return train_tfms, eval_tfms

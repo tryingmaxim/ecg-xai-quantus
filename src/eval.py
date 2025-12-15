@@ -11,7 +11,7 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-
+from src import configs
 from src.model_def import build_model
 
 
@@ -55,7 +55,8 @@ def build_loader(data_dir: str, img_size: int, batch: int, num_workers: int):
             transforms.Resize((img_size, img_size)),
             transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+            transforms.Normalize(mean=configs.IMAGENET_MEAN, std=configs.IMAGENET_STD)
+
         ]
     )
     ds = datasets.ImageFolder(data_dir, tfms)
@@ -82,7 +83,7 @@ def load_checkpoint_and_model(
     else:
         model_name = "resnet18"
 
-    model = build_model(model_name, num_classes=len(classes))
+    model = build_model(model_name, num_classes=len(classes), pretrained=configs.PRETRAINED)
 
     if isinstance(blob, dict) and "state_dict" in blob:
         state = blob["state_dict"]

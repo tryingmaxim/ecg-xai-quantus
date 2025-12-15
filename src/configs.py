@@ -9,10 +9,13 @@ CLASSES = ["Abnormal", "HistoryMI", "MI", "Normal"]
 IMG_SIZE = 224  # Bildgröße für das Modell
 BATCH_SIZE = 64  # Batch-Größe für das Training
 EPOCHS = 15  # Anzahl der Trainings-Epochen
-LR = 1e-3  # Lernrate 0.001quan
+LR = 3e-4  # Lernrate
 WEIGHT_DECAY = 1e-4  # Gewichtszerfall für den Optimierer
 NUM_WORKERS = 4  # Parallele Datenladeprozesse
 SEED = 42  # Zufallstartwert
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD  = [0.229, 0.224, 0.225]
+PRETRAINED = True
 
 OUT_DIR = Path("outputs")
 CKPT_DIR = OUT_DIR / "checkpoints"  # Modell

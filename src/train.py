@@ -71,7 +71,7 @@ def train_one_model(model_name: str):
     train_loader, val_loader, _ = make_loaders()
 
     print(f"\n[INFO] Starte Training für Modell: {model_name}")
-    model = build_model(model_name, len(classes_to_use)).to(device)
+    model = build_model(model_name, len(classes_to_use), pretrained=configs.PRETRAINED).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = AdamW(
         model.parameters(), lr=configs.LR, weight_decay=configs.WEIGHT_DECAY

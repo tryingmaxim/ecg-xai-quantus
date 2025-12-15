@@ -33,6 +33,7 @@ def make_test_loader() -> Tuple[DataLoader, list[str]]:
             transforms.Resize((configs.IMG_SIZE, configs.IMG_SIZE)),
             transforms.Grayscale(num_output_channels=3),
             transforms.ToTensor(),
+            transforms.Normalize(mean=configs.IMAGENET_MEAN, std=configs.IMAGENET_STD),
         ]
     )
 
@@ -55,7 +56,9 @@ def load_model(
     else:
         state = blob
 
-    model = build_model(model_name, num_classes=num_classes)
+    model = build_model(
+        model_name, num_classes=num_classes, pretrained=configs.PRETRAINED
+    )
     clean_state = {
         (k.replace("module.", "") if k.startswith("module.") else k): v
         for k, v in state.items()
@@ -66,12 +69,44 @@ def load_model(
     return model
 
 
-def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.device):
-    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
+def get_feature_extractor(model: torch.nn.Module, model_name: str) -> torch.nn.Module:
+    name = model_name.lower()
 
-    feats = []
-    labels = []
+    if name.startswith("resnet"):
+        return torch.nn.Sequential(*list(model.children())[:-1])
 
+    if name.startswith("densenet"):
+        return torch.nn.Sequential(
+            model.features,
+            torch.nn.ReLU(inplace=False),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+
+    if name.startswith("vgg"):
+        return torch.nn.Sequential(
+            model.features,
+            torch.nn.AdaptiveAvgPool2d((7, 7)),
+        )
+
+    if name.startswith("mobilenet"):
+        return torch.nn.Sequential(
+            model.features,
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+
+    if name.startswith("efficientnet"):
+        return torch.nn.Sequential(
+            model.features,
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+    return torch.nn.Sequential(*list(model.children())[:-1])
+
+
+def extract_features(model, loader, device, model_name: str):
+    feature_extractor = get_feature_extractor(model, model_name).to(device)
+    feature_extractor.eval()
+
+    feats, labels = [], []
     with torch.no_grad():
         for x, y in loader:
             x = x.to(device)
@@ -80,9 +115,8 @@ def extract_features(model: torch.nn.Module, loader: DataLoader, device: torch.d
             feats.append(f.cpu())
             labels.append(y)
 
-    feats = torch.cat(feats, dim=0).numpy()
-    labels = torch.cat(labels, dim=0).numpy()
-    return feats, labels
+    return torch.cat(feats).numpy(), torch.cat(labels).numpy()
+
 
 
 def plot_umap(feats, labels, class_names, model_name: str):
@@ -93,6 +127,7 @@ def plot_umap(feats, labels, class_names, model_name: str):
         min_dist=0.1,
         random_state=42,
     )
+    feats = (feats - feats.mean(axis=0)) / (feats.std(axis=0) + 1e-8)
     emb = reducer.fit_transform(feats)
 
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -138,7 +173,7 @@ def main():
         try:
             print(f"\n[INFO] UMAP für Modell: {model_name}")
             model = load_model(model_name, num_classes=len(class_names), device=device)
-            feats, labels = extract_features(model, loader, device)
+            feats, labels = extract_features(model, loader, device, model_name)
             plot_umap(feats, labels, class_names, model_name)
         except FileNotFoundError as e:
             print(f"[WARN] Überspringe {model_name}: {e}")

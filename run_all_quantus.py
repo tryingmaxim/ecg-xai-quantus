@@ -28,7 +28,8 @@ for m in models:
             f"--method {method} "
             f"--data_dir data/ecg_test_flat "
             f"--limit {LIMIT} "
-            f"--batch_size {BATCH_SIZE}"
+            f"--batch_size {BATCH_SIZE} "
+            f"--mprt_samples 30"
         )
         print("\n=== RUN:", cmd)
         os.system(cmd)
