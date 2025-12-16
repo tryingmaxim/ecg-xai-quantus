@@ -51,7 +51,7 @@
 - [Outputs](#outputs)  
 - [Configuration](#configuration)  
 - [Troubleshooting](#troubleshooting)  
-- [References](References)
+- [References](#References)
 
 ---
 
@@ -93,12 +93,21 @@ It is designed to be:
 This ensures reproducible dependencies and prevents conflicts with PyTorch, CUDA, Quantus, and OmniXAI.
 
 You can either install a **CPU-only environment** (recommended for laptops) or use a **GPU environment** on machines with a compatible NVIDIA GPU and CUDA.
+### Prerequisites
+- Anaconda or Miniconda installed
+- This repository cloned locally
 
-### 💻 Option A — CPU-only (not-recommended)
+Before creating the environment, make sure you are in the project root directory:
+
+```bash
+cd ecg-xai-quantus
+```
+
+### 💻 Option A — CPU-only (recommended for laptops and systems without CUDA)
 
 ```bash
 conda env create -f env.cpu.yml
-conda activate ecg-xai-cpu
+conda activate ecg-xai-quantus
 ```
 This setup does not require CUDA and should work on most systems.
 
@@ -188,13 +197,14 @@ produced by different XAI methods:
 
 ---
 ### 4️⃣ Compute Quantus metrics  
-Runs configured Quantus metrics (e.g., faithfulness, robustness).
+Runs Quantus metrics and stores one CSV file per model and XAI method.
 ```bash
 python run_all_quantus.py
 ```
 stored in: 
 
-outputs/metrics/quantus_<model_name>**_**<xai_method>.csv
+outputs/metrics/quantus_raw/quantus_<model_name>_<xai_method>.csv
+
 
 ## 📊 Quantus Metric Results (ResNet50 — Example)
 
@@ -207,6 +217,10 @@ outputs/metrics/quantus_<model_name>**_**<xai_method>.csv
 
 
 ---
+
+> ⚠️ **Note:** Values are exemplary and depend on random seeds and metric parameters.
+
+
 ### 5️⃣ Generate plots  
 Creates performance graphs, radar charts, sensitivity plots, and more.
 ```bash
@@ -249,14 +263,14 @@ Khan, Ali Haider; Hussain, Muzammil  (2021), “ECG Images dataset of Cardiac Pa
 - **outputs/explanations/** — XAI heatmaps and Integrated Gradients outputs
 - **outputs/metrics/** — Quantus metrics, confusion matrices, prediction files
 - **outputs/plots/** — Generated figures and visualizations
-- **outputs/results/** — Aggregated tables and summaries
+- **outputs/theisis_figures/** — Aggregated tables and summaries
 
 ---
 
 ### **Source Code**
 - **src/train.py** — Training pipeline  
 - **src/eval.py** — Evaluation logic  
-- **src/quantus_eval.py** — Quantus metric computation  
+- **src/quantus_from_heatmaps.py** — Quantus metric computation  
 - **src/explain_omnixai.py** — OmniXAI integration  
 - **src/model_def.py** — Model definitions (ResNet, EfficientNet, etc.)  
 - **src/utils.py** — Helper functions  
@@ -336,7 +350,7 @@ outputs/explanations/efficientnet_b1/ig/
 Examples:
 outputs/metrics/resnet50/confusion_matrix.png  
 outputs/metrics/resnet50/predictions.csv  
-outputs/metrics/resnet50/quantus_results.json
+outputs/metrics/quantus_raw/quantus_resnet50_gradcam.csv
 
 ### **Visualizations**  
 Examples:
@@ -390,8 +404,7 @@ Some metrics require specific shapes or valid ranges. Try:
 - Reducing the number of metrics  
 - Ensuring explanations and predictions are aligned  
 - Adjusting settings inside:
-src/quantus_eval.py
-
+src/quantus_from_heatmaps.py
 ---
 Enjoy exploring **explainable AI for ECG data!** ⚡
 
